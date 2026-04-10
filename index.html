@@ -751,7 +751,7 @@ header h1 {
     <thead>
       <tr>
         <th>項目</th>
-        <th>月</th><th>水</th><th>木</th><th>金</th>
+        <th>月</th><th>火</th><th>水</th><th>木</th><th>金</th>
       </tr>
     </thead>
     <tbody id="mechBody">
@@ -875,7 +875,7 @@ const ELEC_SECTIONS = [
 const ALL_ELEC_KEYS = ELEC_SECTIONS.flatMap(s => s.fields.map(f => f.key));
 
 // 機械設備の曜日（火曜なし）
-const MECH_DAYS = ["mon", "wed", "thu", "fri"];
+const MECH_DAYS = ["mon", "tue", "wed", "thu", "fri"];
 
 // 機械設備項目定義
 const MECH_SECTIONS = [
@@ -1302,7 +1302,7 @@ function buildMechTable() {
   MECH_SECTIONS.forEach(sec => {
     const hdr = document.createElement("tr");
     hdr.className = "section-row";
-    hdr.innerHTML = '<td colspan="5">' + sec.title + '</td>';
+    hdr.innerHTML = '<td colspan="6">' + sec.title + '</td>';
     tbody.appendChild(hdr);
     sec.fields.forEach(f => {
       const tr = document.createElement("tr");
