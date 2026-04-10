@@ -348,7 +348,7 @@ header h1 {
   <button type="button" data-day="tue"><span class="check"></span>火<span class="day-date"></span></button>
   <button type="button" data-day="wed"><span class="check"></span>水<span class="day-date"></span></button>
   <button type="button" data-day="thu"><span class="check"></span>木<span class="day-date"></span></button>
-  <button type="button" data-day="nextMon"><span class="check"></span>翌月<span class="day-date"></span></button>
+  <button type="button" data-day="nextMon"><span class="check"></span>金<span class="day-date"></span></button>
 </nav>
 
 <!-- 入力フォーム（static HTML） -->
@@ -549,7 +549,7 @@ const COPY_FIELDS = [
 ];
 
 const DAYS = ["mon", "tue", "wed", "thu", "nextMon"];
-const DAY_LABELS = { mon: "月", tue: "火", wed: "水", thu: "木", nextMon: "翌月" };
+const DAY_LABELS = { mon: "月", tue: "火", wed: "水", thu: "木", nextMon: "金" };
 const WEEKS = [1, 2, 3, 4, 5];
 
 // ===== グローバル状態 =====
@@ -619,7 +619,7 @@ function computeDate(weekIdx, dayKey) {
   if (!weeklyData.startDate) return "";
   const base = new Date(weeklyData.startDate + "T00:00:00");
   if (isNaN(base.getTime())) return "";
-  const dayOffsetMap = { mon: 0, tue: 1, wed: 2, thu: 3, nextMon: 7 };
+  const dayOffsetMap = { mon: 0, tue: 1, wed: 2, thu: 3, nextMon: 4 };
   const offsetDays = (weekIdx - 1) * 7 + dayOffsetMap[dayKey];
   const d = new Date(base);
   d.setDate(base.getDate() + offsetDays);
