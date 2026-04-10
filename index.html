@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="format-detection" content="telephone=no">
+<title>上殿浄化センター 週報入力</title>
+<style>
+/* ===== 基本スタイル ===== */
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  background: #f0f2f5;
+  color: #222;
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  max-width: 480px;
+  margin: 0 auto;
+  padding-bottom: 80px;
+  min-height: 100vh;
+  background: #f0f2f5;
+}
+
+/* ===== ヘッダー ===== */
+header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: linear-gradient(135deg, #0d4f34, #1a7a56);
+  color: #fff;
+  padding: 12px 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+header h1 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.header-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.header-controls label {
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 130px;
+}
+.header-controls label span { opacity: 0.85; }
+.header-controls input {
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  font-size: 15px;
+  background: rgba(255,255,255,0.95);
+  color: #222;
+  font-family: inherit;
+  min-height: 36px;
+}
+
+/* ===== 週タブ ===== */
+.week-tabs {
+  display: flex;
+  overflow-x: auto;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  scrollbar-width: none;
+}
+.week-tabs::-webkit-scrollbar { display: none; }
+.week-tabs button {
+  flex: 0 0 auto;
+  min-width: 80px;
+  padding: 14px 12px;
+  border: none;
+  background: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  color: #666;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.week-tabs button.active {
+  color: #0d4f34;
+  border-bottom-color: #0d4f34;
+  background: #f8fcfa;
+}
+
+/* ===== 日タブ ===== */
+.day-tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+}
+.day-tabs button {
+  flex: 1;
+  padding: 12px 4px;
+  border: none;
+  background: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  position: relative;
+}
+.day-tabs button.active {
+  color: #0d4f34;
+  border-bottom-color: #0d4f34;
+  background: #f8fcfa;
+  font-weight: 600;
+}
+.day-tabs button .check {
+  display: inline-block;
+  width: 14px;
+  color: #1a7a56;
+  font-weight: 700;
+}
+.day-tabs button .day-date {
+  display: block;
+  font-size: 10px;
+  opacity: 0.7;
+  margin-top: 2px;
+}
+
+/* ===== 入力フォーム ===== */
+.form-wrap {
+  padding: 12px;
+}
+.section {
+  background: #fff;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.section-header {
+  background: #eef5f1;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0d4f34;
+  border-bottom: 1px solid #dde8e2;
+}
+.field {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0f0f0;
+  gap: 8px;
+  min-height: 56px;
+}
+.field:last-child { border-bottom: none; }
+.field .label {
+  flex: 1;
+  font-size: 15px;
+  color: #333;
+}
+.field .unit {
+  font-size: 13px;
+  color: #888;
+  min-width: 36px;
+  text-align: right;
+}
+.field input[type="number"],
+.field input[type="text"] {
+  width: 130px;
+  height: 44px;
+  padding: 8px 12px;
+  border: 1px solid #ccd;
+  border-radius: 8px;
+  font-size: 16px;
+  text-align: right;
+  font-family: inherit;
+  background: #fafbfc;
+}
+.field input[type="text"] { text-align: left; }
+.field input:focus {
+  outline: none;
+  border-color: #0d4f34;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(13,79,52,0.15);
+}
+
+/* ===== ボタン群 ===== */
+.actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  flex-wrap: wrap;
+}
+.actions button {
+  flex: 1;
+  min-width: 90px;
+  padding: 14px 8px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.05s, box-shadow 0.15s;
+  min-height: 48px;
+}
+.actions button:active { transform: scale(0.97); }
+.btn-copy {
+  background: #e8f0fe;
+  color: #1c4ba8;
+}
+.btn-clear {
+  background: #fdecea;
+  color: #b3261e;
+}
+.btn-save {
+  background: linear-gradient(135deg, #0d4f34, #1a7a56);
+  color: #fff;
+  flex: 2;
+  box-shadow: 0 2px 6px rgba(13,79,52,0.25);
+}
+
+/* ===== トースト ===== */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: #0d4f34;
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 24px;
+  font-size: 14px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 200;
+  max-width: 90%;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.toast.error { background: #b3261e; }
+.toast.warn { background: #b8860b; }
+
+/* ===== Excel出力ボタン ===== */
+.excel-wrap {
+  padding: 0 12px 12px;
+}
+.btn-excel {
+  display: block;
+  width: 100%;
+  height: 48px;
+  background: #1565C0;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.05s, box-shadow 0.15s;
+  box-shadow: 0 2px 6px rgba(21,101,192,0.25);
+}
+.btn-excel:active { transform: scale(0.97); }
+.btn-excel:disabled { opacity: 0.6; cursor: default; }
+
+/* ===== 同期ボタン ===== */
+.btn-sync {
+  background: #e0e0e0;
+  color: #444;
+  flex: 1 !important;
+}
+
+/* ===== 接続状態 ===== */
+.conn-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 4px 0 0 0;
+  opacity: 0.9;
+}
+.conn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #888;
+}
+.conn-dot.online { background: #4caf50; }
+.conn-dot.offline { background: #888; }
+
+/* ===== フッター情報 ===== */
+.info-bar {
+  padding: 8px 14px;
+  font-size: 11px;
+  color: #888;
+  text-align: center;
+  background: #fafafa;
+}
+</style>
+</head>
+<body>
+
+<!-- ヘッダー -->
+<header>
+  <h1>上殿浄化センター 週報入力</h1>
+  <div class="header-controls">
+    <label>
+      <span>対象年月</span>
+      <input type="month" id="targetMonth">
+    </label>
+    <label>
+      <span>第1週 月曜日</span>
+      <input type="date" id="startDate">
+    </label>
+  </div>
+  <div class="conn-status" id="connStatus">
+    <span class="conn-dot" id="connDot"></span>
+    <span id="connLabel">接続確認中...</span>
+  </div>
+</header>
+
+<!-- 週タブ -->
+<nav class="week-tabs" id="weekTabs">
+  <button type="button" data-week="1" class="active">第1週</button>
+  <button type="button" data-week="2">第2週</button>
+  <button type="button" data-week="3">第3週</button>
+  <button type="button" data-week="4">第4週</button>
+  <button type="button" data-week="5">第5週</button>
+</nav>
+
+<!-- 日タブ -->
+<nav class="day-tabs" id="dayTabs">
+  <button type="button" data-day="mon" class="active"><span class="check"></span>月<span class="day-date"></span></button>
+  <button type="button" data-day="tue"><span class="check"></span>火<span class="day-date"></span></button>
+  <button type="button" data-day="wed"><span class="check"></span>水<span class="day-date"></span></button>
+  <button type="button" data-day="thu"><span class="check"></span>木<span class="day-date"></span></button>
+  <button type="button" data-day="nextMon"><span class="check"></span>翌月<span class="day-date"></span></button>
+</nav>
+
+<!-- 入力フォーム（static HTML） -->
+<div class="form-wrap">
+
+  <!-- セクション1: 積算値・流量 -->
+  <div class="section">
+    <div class="section-header">積算値・流量</div>
+    <div class="field">
+      <span class="label">普通電力量(200V)</span>
+      <span class="unit">Kwh</span>
+      <input type="number" inputmode="decimal" step="0.01" data-field="power200v">
+    </div>
+    <div class="field">
+      <span class="label">普通電力量(100V)</span>
+      <span class="unit">Kwh</span>
+      <input type="number" inputmode="decimal" step="0.1" data-field="power100v">
+    </div>
+    <div class="field">
+      <span class="label">水道使用量</span>
+      <span class="unit">㎥</span>
+      <input type="number" inputmode="decimal" step="0.001" data-field="water">
+    </div>
+    <div class="field">
+      <span class="label">軽油(残量)</span>
+      <span class="unit">ℓ</span>
+      <input type="number" inputmode="decimal" step="1" data-field="diesel">
+    </div>
+    <div class="field">
+      <span class="label">返送汚泥流量</span>
+      <span class="unit">㎥</span>
+      <input type="number" inputmode="decimal" step="0.01" data-field="returnSludge">
+    </div>
+    <div class="field">
+      <span class="label">余剰汚泥流量</span>
+      <span class="unit">㎥</span>
+      <input type="number" inputmode="decimal" step="0.01" data-field="excessSludge">
+    </div>
+    <div class="field">
+      <span class="label">放流流量</span>
+      <span class="unit">㎥</span>
+      <input type="number" inputmode="decimal" step="1" data-field="discharge">
+    </div>
+  </div>
+
+  <!-- セクション2: 水温 -->
+  <div class="section">
+    <div class="section-header">水温 (℃)</div>
+    <div class="field">
+      <span class="label">流入</span>
+      <span class="unit">℃</span>
+      <input type="number" inputmode="decimal" step="0.1" data-field="tempIn">
+    </div>
+    <div class="field">
+      <span class="label">ディッチ</span>
+      <span class="unit">℃</span>
+      <input type="number" inputmode="decimal" step="0.1" data-field="tempDitch">
+    </div>
+    <div class="field">
+      <span class="label">放流</span>
+      <span class="unit">℃</span>
+      <input type="number" inputmode="decimal" step="0.1" data-field="tempOut">
+    </div>
+  </div>
+
+  <!-- セクション3: 透視度 -->
+  <div class="section">
+    <div class="section-header">透視度 (cm)</div>
+    <div class="field">
+      <span class="label">流入水</span>
+      <span class="unit">cm</span>
+      <input type="number" inputmode="decimal" step="0.1" data-field="transIn">
+    </div>
+    <div class="field">
+      <span class="label">放流水</span>
+      <span class="unit">cm</span>
+      <input type="number" inputmode="decimal" step="0.1" data-field="transOut">
+    </div>
+  </div>
+
+  <!-- セクション4: PH -->
+  <div class="section">
+    <div class="section-header">PH</div>
+    <div class="field">
+      <span class="label">流入</span>
+      <span class="unit"></span>
+      <input type="number" inputmode="decimal" step="0.01" data-field="phIn">
+    </div>
+    <div class="field">
+      <span class="label">ディッチ</span>
+      <span class="unit"></span>
+      <input type="number" inputmode="decimal" step="0.01" data-field="phDitch">
+    </div>
+    <div class="field">
+      <span class="label">放流</span>
+      <span class="unit"></span>
+      <input type="number" inputmode="decimal" step="0.01" data-field="phOut">
+    </div>
+  </div>
+
+  <!-- セクション5: SV -->
+  <div class="section">
+    <div class="section-header">SV (%) ディッチ</div>
+    <div class="field">
+      <span class="label">SV・10</span>
+      <span class="unit">%</span>
+      <input type="number" inputmode="decimal" step="1" data-field="sv10">
+    </div>
+    <div class="field">
+      <span class="label">SV・20</span>
+      <span class="unit">%</span>
+      <input type="number" inputmode="decimal" step="1" data-field="sv20">
+    </div>
+    <div class="field">
+      <span class="label">SV・30</span>
+      <span class="unit">%</span>
+      <input type="number" inputmode="decimal" step="1" data-field="sv30">
+    </div>
+    <div class="field">
+      <span class="label">SV・24h</span>
+      <span class="unit">%</span>
+      <input type="number" inputmode="decimal" step="1" data-field="sv24h">
+    </div>
+  </div>
+
+  <!-- セクション6: その他 -->
+  <div class="section">
+    <div class="section-header">その他</div>
+    <div class="field">
+      <span class="label">MLSS(ディッチ)</span>
+      <span class="unit">mg/L</span>
+      <input type="number" inputmode="decimal" step="1" data-field="mlss">
+    </div>
+    <div class="field">
+      <span class="label">汚泥界面(終沈)</span>
+      <span class="unit">cm</span>
+      <input type="number" inputmode="decimal" step="1" data-field="sludgeLevel">
+    </div>
+    <div class="field">
+      <span class="label">残留塩素(放流水)</span>
+      <span class="unit">mg/L</span>
+      <input type="number" inputmode="decimal" step="0.1" data-field="chlorine">
+    </div>
+  </div>
+
+  <!-- セクション7: 測定者 -->
+  <div class="section">
+    <div class="section-header">測定者</div>
+    <div class="field">
+      <span class="label">測定者名</span>
+      <span class="unit"></span>
+      <input type="text" data-field="inspector">
+    </div>
+  </div>
+
+</div>
+
+<!-- 操作ボタン -->
+<div class="actions">
+  <button type="button" class="btn-copy" id="btnCopy">前日コピー</button>
+  <button type="button" class="btn-clear" id="btnClear">全クリア</button>
+  <button type="button" class="btn-save" id="btnSave">保存</button>
+  <button type="button" class="btn-sync" id="btnSync">同期</button>
+</div>
+
+<div class="excel-wrap">
+  <button type="button" class="btn-excel" id="btnExcel">📄 Excel出力（日常水質）</button>
+</div>
+
+<div class="info-bar">データは端末に保存されます（localStorage）</div>
+
+<!-- トースト -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== GAS URL =====
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzdR1QUVCLD8f0c4vP12F34z9I7wwpAIhCBr9FwmFYFsgKjv3U_duvM9ihG2EG1bDaZ/exec';
+
+// ===== 定数定義 =====
+
+const ALL_FIELDS = [
+  "power200v", "power100v", "water", "diesel",
+  "returnSludge", "excessSludge", "discharge",
+  "tempIn", "tempDitch", "tempOut",
+  "transIn", "transOut",
+  "phIn", "phDitch", "phOut",
+  "sv10", "sv20", "sv30", "sv24h",
+  "mlss", "sludgeLevel", "chlorine",
+  "inspector"
+];
+
+const COPY_FIELDS = [
+  "tempIn", "tempDitch", "tempOut",
+  "transIn", "transOut",
+  "phIn", "phDitch", "phOut",
+  "sv10", "sv20", "sv30", "sv24h",
+  "mlss", "sludgeLevel", "chlorine"
+];
+
+const DAYS = ["mon", "tue", "wed", "thu", "nextMon"];
+const DAY_LABELS = { mon: "月", tue: "火", wed: "水", thu: "木", nextMon: "翌月" };
+const WEEKS = [1, 2, 3, 4, 5];
+
+// ===== グローバル状態 =====
+
+let weeklyData = {
+  startDate: "",
+  targetMonth: "",
+  weeks: {}
+};
+
+let currentWeek = 1;
+let currentDay = "mon";
+let isOnline = false;
+
+// ===== ユーティリティ =====
+
+function emptyDay() {
+  const d = {};
+  ALL_FIELDS.forEach(k => { d[k] = (k === "inspector") ? "" : null; });
+  return d;
+}
+
+function emptyWeek() {
+  const w = {};
+  DAYS.forEach(d => { w[d] = emptyDay(); });
+  return w;
+}
+
+function ensureWeeklyStructure() {
+  if (!weeklyData.weeks || typeof weeklyData.weeks !== "object") weeklyData.weeks = {};
+  WEEKS.forEach(w => {
+    if (!weeklyData.weeks[w]) weeklyData.weeks[w] = emptyWeek();
+    DAYS.forEach(d => {
+      if (!weeklyData.weeks[w][d]) weeklyData.weeks[w][d] = emptyDay();
+      ALL_FIELDS.forEach(k => {
+        if (!(k in weeklyData.weeks[w][d])) {
+          weeklyData.weeks[w][d][k] = (k === "inspector") ? "" : null;
+        }
+      });
+    });
+  });
+}
+
+function storageKey() {
+  return "uedono_weekly_" + (weeklyData.targetMonth || "default");
+}
+
+function currentYearMonth() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+}
+
+function estimateStartDate(ym) {
+  if (!ym) return "";
+  const [y, m] = ym.split("-").map(Number);
+  const first = new Date(y, m - 1, 1);
+  const dow = first.getDay();
+  const offset = (dow === 1) ? 0 : (dow === 0 ? 1 : (8 - dow) % 7);
+  const monday = new Date(y, m - 1, 1 + offset);
+  const yy = monday.getFullYear();
+  const mm = String(monday.getMonth() + 1).padStart(2, "0");
+  const dd = String(monday.getDate()).padStart(2, "0");
+  return yy + "-" + mm + "-" + dd;
+}
+
+function computeDate(weekIdx, dayKey) {
+  if (!weeklyData.startDate) return "";
+  const base = new Date(weeklyData.startDate + "T00:00:00");
+  if (isNaN(base.getTime())) return "";
+  const dayOffsetMap = { mon: 0, tue: 1, wed: 2, thu: 3, nextMon: 7 };
+  const offsetDays = (weekIdx - 1) * 7 + dayOffsetMap[dayKey];
+  const d = new Date(base);
+  d.setDate(base.getDate() + offsetDays);
+  return (d.getMonth() + 1) + "/" + d.getDate();
+}
+
+function isDayFilled(weekIdx, dayKey) {
+  const day = weeklyData.weeks[weekIdx] && weeklyData.weeks[weekIdx][dayKey];
+  if (!day) return false;
+  return ALL_FIELDS.some(k => {
+    const v = day[k];
+    return v !== null && v !== undefined && v !== "";
+  });
+}
+
+// ===== 接続状態表示 =====
+
+function setConnectionStatus(online) {
+  isOnline = online;
+  const dot = document.getElementById("connDot");
+  const label = document.getElementById("connLabel");
+  if (online) {
+    dot.className = "conn-dot online";
+    label.textContent = "サーバー接続済み";
+  } else {
+    dot.className = "conn-dot offline";
+    label.textContent = "オフライン（端末保存のみ）";
+  }
+}
+
+async function checkConnection() {
+  try {
+    const res = await fetch(GAS_URL + '?action=ping', { method: 'GET' });
+    if (res.ok) {
+      setConnectionStatus(true);
+    } else {
+      setConnectionStatus(false);
+    }
+  } catch (e) {
+    setConnectionStatus(false);
+  }
+}
+
+// ===== フォーム <-> データ =====
+
+function saveFormToData() {
+  const day = weeklyData.weeks[currentWeek][currentDay];
+  document.querySelectorAll("[data-field]").forEach(el => {
+    const key = el.dataset.field;
+    if (el.type === "number") {
+      day[key] = el.value === "" ? null : Number(el.value);
+    } else {
+      day[key] = el.value;
+    }
+  });
+}
+
+function loadDataToForm() {
+  const day = weeklyData.weeks[currentWeek][currentDay];
+  document.querySelectorAll("[data-field]").forEach(el => {
+    const key = el.dataset.field;
+    const v = day[key];
+    el.value = (v === null || v === undefined) ? "" : v;
+  });
+  const inspEl = document.querySelector('[data-field="inspector"]');
+  if (inspEl && !inspEl.value) {
+    const last = localStorage.getItem("uedono_last_inspector") || "";
+    if (last) {
+      inspEl.value = last;
+      day.inspector = last;
+    }
+  }
+}
+
+// ===== タブ更新 =====
+
+function updateWeekTabs() {
+  document.querySelectorAll("#weekTabs button").forEach(btn => {
+    btn.classList.toggle("active", Number(btn.dataset.week) === currentWeek);
+  });
+}
+
+function updateDayTabs() {
+  document.querySelectorAll("#dayTabs button").forEach(btn => {
+    const d = btn.dataset.day;
+    btn.classList.toggle("active", d === currentDay);
+    const check = btn.querySelector(".check");
+    const dateSpan = btn.querySelector(".day-date");
+    if (check) check.textContent = isDayFilled(currentWeek, d) ? "✓" : "";
+    if (dateSpan) dateSpan.textContent = computeDate(currentWeek, d) || "";
+  });
+}
+
+// ===== localStorage保存・読込 =====
+
+function saveToStorage() {
+  try {
+    saveFormToData();
+    weeklyData.targetMonth = document.getElementById("targetMonth").value || weeklyData.targetMonth;
+    weeklyData.startDate = document.getElementById("startDate").value || weeklyData.startDate;
+    localStorage.setItem(storageKey(), JSON.stringify(weeklyData));
+    const inspEl = document.querySelector('[data-field="inspector"]');
+    if (inspEl && inspEl.value) {
+      localStorage.setItem("uedono_last_inspector", inspEl.value);
+    }
+    if (weeklyData.targetMonth) {
+      localStorage.setItem("uedono_current_month", weeklyData.targetMonth);
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(storageKey());
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      weeklyData = Object.assign({ startDate: "", targetMonth: "", weeks: {} }, parsed);
+    }
+  } catch (e) {}
+  ensureWeeklyStructure();
+}
+
+// ===== GASサーバー通信 =====
+
+// GASにデータを送信
+async function saveToServer() {
+  const payload = {
+    action: 'saveAll',
+    month: weeklyData.targetMonth,
+    startDate: weeklyData.startDate,
+    weeks: weeklyData.weeks
+  };
+  const res = await fetch(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return await res.json();
+}
+
+// GASからデータを取得
+async function loadFromServer(month) {
+  const url = GAS_URL + '?action=getData&month=' + encodeURIComponent(month);
+  const res = await fetch(url, { method: 'GET' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return await res.json();
+}
+
+// サーバーデータをマージ（サーバー側が新しければ上書き）
+function mergeServerData(serverData) {
+  if (!serverData || !serverData.weeks) return false;
+  // サーバーからデータが取得できた場合、上書きする
+  weeklyData.weeks = serverData.weeks;
+  if (serverData.startDate) weeklyData.startDate = serverData.startDate;
+  ensureWeeklyStructure();
+  // localStorageにも反映
+  localStorage.setItem(storageKey(), JSON.stringify(weeklyData));
+  return true;
+}
+
+// バックグラウンドでサーバーから取得
+async function syncFromServer() {
+  try {
+    const data = await loadFromServer(weeklyData.targetMonth);
+    if (data && data.weeks && Object.keys(data.weeks).length > 0) {
+      mergeServerData(data);
+      // UI更新
+      document.getElementById("startDate").value = weeklyData.startDate || "";
+      updateDayTabs();
+      loadDataToForm();
+      setConnectionStatus(true);
+      return true;
+    }
+    setConnectionStatus(true);
+    return false;
+  } catch (e) {
+    setConnectionStatus(false);
+    return false;
+  }
+}
+
+// ===== タブ切替 =====
+
+function switchTo(week, day) {
+  saveFormToData();
+  currentWeek = week;
+  currentDay = day;
+  updateWeekTabs();
+  updateDayTabs();
+  loadDataToForm();
+}
+
+// ===== トースト通知 =====
+
+let toastTimer = null;
+function showToast(msg, type) {
+  // type: undefined=success(green), "error"=red, "warn"=yellow
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  let cls = "toast show";
+  if (type === "error") cls += " error";
+  else if (type === "warn") cls += " warn";
+  t.className = cls;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    t.className = "toast";
+  }, 3000);
+}
+
+// ===== イベントハンドラ =====
+
+function bindEvents() {
+  // 週タブ
+  document.querySelectorAll("#weekTabs button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      switchTo(Number(btn.dataset.week), currentDay);
+    });
+  });
+
+  // 日タブ
+  document.querySelectorAll("#dayTabs button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      switchTo(currentWeek, btn.dataset.day);
+    });
+  });
+
+  // 入力中にタブの✓を即時反映
+  document.querySelectorAll("[data-field]").forEach(el => {
+    el.addEventListener("input", () => {
+      const day = weeklyData.weeks[currentWeek][currentDay];
+      const key = el.dataset.field;
+      if (el.type === "number") {
+        day[key] = el.value === "" ? null : Number(el.value);
+      } else {
+        day[key] = el.value;
+      }
+      updateDayTabs();
+    });
+  });
+
+  // 対象月変更
+  document.getElementById("targetMonth").addEventListener("change", (e) => {
+    saveToStorage();
+    const newMonth = e.target.value;
+    const raw = localStorage.getItem("uedono_weekly_" + newMonth);
+    if (raw) {
+      try { weeklyData = JSON.parse(raw); } catch (err) {
+        weeklyData = { targetMonth: newMonth, startDate: "", weeks: {} };
+      }
+    } else {
+      weeklyData = {
+        targetMonth: newMonth,
+        startDate: estimateStartDate(newMonth),
+        weeks: {}
+      };
+    }
+    weeklyData.targetMonth = newMonth;
+    ensureWeeklyStructure();
+    document.getElementById("startDate").value = weeklyData.startDate || "";
+    localStorage.setItem("uedono_current_month", newMonth);
+    currentWeek = 1;
+    currentDay = "mon";
+    updateWeekTabs();
+    updateDayTabs();
+    loadDataToForm();
+    showToast("対象月を " + newMonth + " に変更しました");
+    // バックグラウンドでサーバーからも取得
+    syncFromServer();
+  });
+
+  // 開始日変更
+  document.getElementById("startDate").addEventListener("change", (e) => {
+    weeklyData.startDate = e.target.value;
+    updateDayTabs();
+  });
+
+  // 前日コピー
+  document.getElementById("btnCopy").addEventListener("click", () => {
+    saveFormToData();
+    const order = ["mon", "tue", "wed", "thu", "nextMon"];
+    const idx = order.indexOf(currentDay);
+    let src = null;
+    let srcLabel = "";
+
+    if (idx > 0) {
+      src = weeklyData.weeks[currentWeek][order[idx - 1]];
+      srcLabel = DAY_LABELS[order[idx - 1]] + "曜日";
+    } else if (currentWeek > 1) {
+      src = weeklyData.weeks[currentWeek - 1].thu;
+      srcLabel = "第" + (currentWeek - 1) + "週の木曜";
+    } else {
+      showToast("コピー元の前日がありません", "error");
+      return;
+    }
+
+    const dst = weeklyData.weeks[currentWeek][currentDay];
+    COPY_FIELDS.forEach(k => { dst[k] = src[k]; });
+    loadDataToForm();
+    updateDayTabs();
+    showToast(srcLabel + "からコピーしました");
+  });
+
+  // 全クリア（現在の日のみ）
+  document.getElementById("btnClear").addEventListener("click", () => {
+    const label = "第" + currentWeek + "週 " + DAY_LABELS[currentDay];
+    if (!confirm(label + " のデータをすべてクリアしますか？")) return;
+    weeklyData.weeks[currentWeek][currentDay] = emptyDay();
+    loadDataToForm();
+    updateDayTabs();
+    showToast(label + " をクリアしました");
+  });
+
+  // 保存ボタン
+  document.getElementById("btnSave").addEventListener("click", async () => {
+    const btnSave = document.getElementById("btnSave");
+
+    // a. まずlocalStorageに保存
+    const ok = saveToStorage();
+    if (!ok) {
+      showToast("保存に失敗しました", "error");
+      return;
+    }
+
+    // b. GASに非同期でPOST送信
+    btnSave.textContent = "送信中...";
+    btnSave.disabled = true;
+
+    try {
+      await saveToServer();
+      setConnectionStatus(true);
+      showToast("保存しました（サーバー同期完了）");
+    } catch (e) {
+      setConnectionStatus(false);
+      showToast("端末に保存しました（サーバー同期に失敗。後で再試行してください）", "warn");
+    } finally {
+      btnSave.textContent = "保存";
+      btnSave.disabled = false;
+    }
+  });
+
+  // 同期ボタン
+  document.getElementById("btnSync").addEventListener("click", async () => {
+    const btnSync = document.getElementById("btnSync");
+    btnSync.textContent = "同期中...";
+    btnSync.disabled = true;
+
+    try {
+      // まず現在のデータをサーバーに送信
+      saveToStorage();
+      await saveToServer();
+
+      // サーバーから最新データを取得
+      const updated = await syncFromServer();
+      if (updated) {
+        showToast("サーバーと同期しました");
+      } else {
+        showToast("サーバーにデータがありません（端末データを送信済み）");
+      }
+      setConnectionStatus(true);
+    } catch (e) {
+      setConnectionStatus(false);
+      showToast("同期に失敗しました", "error");
+    } finally {
+      btnSync.textContent = "同期";
+      btnSync.disabled = false;
+    }
+  });
+
+  // Excel出力ボタン
+  document.getElementById("btnExcel").addEventListener("click", async () => {
+    const btnExcel = document.getElementById("btnExcel");
+    btnExcel.textContent = "生成中...";
+    btnExcel.disabled = true;
+
+    try {
+      const month = weeklyData.targetMonth || document.getElementById("targetMonth").value;
+      const url = GAS_URL + '?action=exportExcel&month=' + encodeURIComponent(month);
+      const res = await fetch(url, { redirect: 'follow' });
+      const data = await res.json();
+
+      if (data.status === 'ok' && data.downloadUrl) {
+        window.open(data.downloadUrl, '_blank');
+        showToast("Excelファイルを生成しました。ダウンロードが開始されます。");
+      } else {
+        showToast("Excel生成に失敗しました: " + (data.message || "不明なエラー"), "error");
+      }
+    } catch (e) {
+      showToast("Excel生成に失敗しました: " + e.message, "error");
+    } finally {
+      btnExcel.textContent = "📄 Excel出力（日常水質）";
+      btnExcel.disabled = false;
+    }
+  });
+}
+
+// ===== 初期化 =====
+
+async function init() {
+  // 対象月：前回保存 or 現在月
+  const savedMonth = localStorage.getItem("uedono_current_month");
+  const ym = savedMonth || currentYearMonth();
+  weeklyData.targetMonth = ym;
+
+  // a. まずlocalStorageから即座に復元
+  loadFromStorage();
+
+  if (!weeklyData.targetMonth) weeklyData.targetMonth = ym;
+  if (!weeklyData.startDate) weeklyData.startDate = estimateStartDate(weeklyData.targetMonth);
+
+  document.getElementById("targetMonth").value = weeklyData.targetMonth;
+  document.getElementById("startDate").value = weeklyData.startDate;
+  localStorage.setItem("uedono_current_month", weeklyData.targetMonth);
+
+  bindEvents();
+
+  // 初期表示
+  updateWeekTabs();
+  updateDayTabs();
+  loadDataToForm();
+
+  // b. バックグラウンドでGASからデータ取得（接続確認を兼ねる）
+  syncFromServer();
+}
+
+init();
+</script>
+
+</body>
+</html>
