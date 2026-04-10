@@ -304,6 +304,103 @@ header h1 {
 .conn-dot.online { background: #4caf50; }
 .conn-dot.offline { background: #888; }
 
+/* ===== メインタブ（シート切替） ===== */
+.main-tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 2px solid #e0e0e0;
+}
+.main-tabs button {
+  flex: 1;
+  padding: 12px 8px;
+  border: none;
+  background: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  color: #888;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.main-tabs button.active {
+  color: #0d4f34;
+  border-bottom-color: #0d4f34;
+  font-weight: 700;
+  background: #f8fcfa;
+}
+
+/* ===== 機器運転時間テーブル ===== */
+.equip-panel { display: none; }
+.equip-panel.visible { display: block; }
+.equip-wrap {
+  padding: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.equip-table {
+  width: 100%;
+  min-width: 420px;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  font-size: 13px;
+}
+.equip-table thead th {
+  background: #eef5f1;
+  color: #0d4f34;
+  font-weight: 600;
+  padding: 8px 4px;
+  text-align: center;
+  border-bottom: 1px solid #dde8e2;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.equip-table thead th:first-child {
+  text-align: left;
+  padding-left: 10px;
+  min-width: 120px;
+}
+.equip-table tbody td {
+  padding: 4px;
+  border-bottom: 1px solid #f0f0f0;
+  text-align: center;
+}
+.equip-table tbody td:first-child {
+  text-align: left;
+  padding-left: 10px;
+  font-size: 12px;
+  color: #333;
+  white-space: nowrap;
+}
+.equip-table tbody tr:last-child td { border-bottom: none; }
+.equip-table input[type="number"] {
+  width: 60px;
+  height: 40px;
+  padding: 4px;
+  border: 1px solid #ccd;
+  border-radius: 6px;
+  font-size: 14px;
+  text-align: right;
+  font-family: inherit;
+  background: #fafbfc;
+}
+.equip-table input[type="number"]:focus {
+  outline: none;
+  border-color: #0d4f34;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(13,79,52,0.15);
+}
+.equip-unit {
+  font-size: 11px;
+  color: #888;
+  text-align: center;
+  padding: 4px;
+}
+
 /* ===== フッター情報 ===== */
 .info-bar {
   padding: 8px 14px;
@@ -334,6 +431,15 @@ header h1 {
     <span id="connLabel">接続確認中...</span>
   </div>
 </header>
+
+<!-- メインタブ（シート切替） -->
+<nav class="main-tabs" id="mainTabs">
+  <button type="button" data-sheet="water" class="active">日常水質</button>
+  <button type="button" data-sheet="equip">機器運転時間</button>
+</nav>
+
+<!-- ===== 日常水質パネル ===== -->
+<div id="waterPanel">
 
 <!-- 週タブ -->
 <nav class="week-tabs" id="weekTabs">
@@ -508,6 +614,53 @@ header h1 {
 
 </div>
 
+</div><!-- /waterPanel -->
+
+<!-- ===== 機器運転時間パネル ===== -->
+<div id="equipPanel" class="equip-panel">
+
+<!-- 週タブ（機器用） -->
+<nav class="week-tabs" id="equipWeekTabs">
+  <button type="button" data-week="1" class="active">第1週</button>
+  <button type="button" data-week="2">第2週</button>
+  <button type="button" data-week="3">第3週</button>
+  <button type="button" data-week="4">第4週</button>
+  <button type="button" data-week="5">第5週</button>
+</nav>
+
+<div class="equip-wrap">
+  <table class="equip-table" id="equipTable">
+    <thead>
+      <tr>
+        <th>機器名称</th>
+        <th>月<br><span class="equip-unit">hr</span></th>
+        <th>火<br><span class="equip-unit">hr</span></th>
+        <th>水<br><span class="equip-unit">hr</span></th>
+        <th>木<br><span class="equip-unit">hr</span></th>
+        <th>金<br><span class="equip-unit">hr</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>スクリーンユニット</td><td><input type="number" inputmode="decimal" step="0.1" data-equip="screenUnit" data-eday="mon"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="screenUnit" data-eday="tue"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="screenUnit" data-eday="wed"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="screenUnit" data-eday="thu"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="screenUnit" data-eday="fri"></td></tr>
+      <tr><td>№１主ポンプ</td><td><input type="number" inputmode="decimal" step="0.1" data-equip="mainPump1" data-eday="mon"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="mainPump1" data-eday="tue"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="mainPump1" data-eday="wed"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="mainPump1" data-eday="thu"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="mainPump1" data-eday="fri"></td></tr>
+      <tr><td>№２主ポンプ</td><td><input type="number" inputmode="decimal" step="0.1" data-equip="mainPump2" data-eday="mon"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="mainPump2" data-eday="tue"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="mainPump2" data-eday="wed"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="mainPump2" data-eday="thu"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="mainPump2" data-eday="fri"></td></tr>
+      <tr><td>№１汚泥ポンプ</td><td><input type="number" inputmode="decimal" step="0.1" data-equip="sludgePump1" data-eday="mon"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="sludgePump1" data-eday="tue"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="sludgePump1" data-eday="wed"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="sludgePump1" data-eday="thu"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="sludgePump1" data-eday="fri"></td></tr>
+      <tr><td>№２汚泥ポンプ</td><td><input type="number" inputmode="decimal" step="0.1" data-equip="sludgePump2" data-eday="mon"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="sludgePump2" data-eday="tue"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="sludgePump2" data-eday="wed"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="sludgePump2" data-eday="thu"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="sludgePump2" data-eday="fri"></td></tr>
+      <tr><td>№１エアレーション装置</td><td><input type="number" inputmode="decimal" step="0.1" data-equip="aeration1" data-eday="mon"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="aeration1" data-eday="tue"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="aeration1" data-eday="wed"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="aeration1" data-eday="thu"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="aeration1" data-eday="fri"></td></tr>
+      <tr><td>№２エアレーション装置</td><td><input type="number" inputmode="decimal" step="0.1" data-equip="aeration2" data-eday="mon"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="aeration2" data-eday="tue"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="aeration2" data-eday="wed"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="aeration2" data-eday="thu"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="aeration2" data-eday="fri"></td></tr>
+      <tr><td>№３エアレーション装置</td><td><input type="number" inputmode="decimal" step="0.1" data-equip="aeration3" data-eday="mon"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="aeration3" data-eday="tue"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="aeration3" data-eday="wed"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="aeration3" data-eday="thu"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="aeration3" data-eday="fri"></td></tr>
+      <tr><td>終沈汚泥かき寄せ機</td><td><input type="number" inputmode="decimal" step="0.1" data-equip="finalScraper" data-eday="mon"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="finalScraper" data-eday="tue"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="finalScraper" data-eday="wed"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="finalScraper" data-eday="thu"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="finalScraper" data-eday="fri"></td></tr>
+      <tr><td>№１返流水ポンプ</td><td><input type="number" inputmode="decimal" step="0.1" data-equip="returnPump1" data-eday="mon"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="returnPump1" data-eday="tue"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="returnPump1" data-eday="wed"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="returnPump1" data-eday="thu"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="returnPump1" data-eday="fri"></td></tr>
+      <tr><td>№２返流水ポンプ</td><td><input type="number" inputmode="decimal" step="0.1" data-equip="returnPump2" data-eday="mon"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="returnPump2" data-eday="tue"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="returnPump2" data-eday="wed"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="returnPump2" data-eday="thu"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="returnPump2" data-eday="fri"></td></tr>
+      <tr><td>濃縮汚泥ポンプ</td><td><input type="number" inputmode="decimal" step="0.1" data-equip="thickPump" data-eday="mon"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="thickPump" data-eday="tue"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="thickPump" data-eday="wed"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="thickPump" data-eday="thu"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="thickPump" data-eday="fri"></td></tr>
+      <tr><td>濃縮汚泥かき寄せ機</td><td><input type="number" inputmode="decimal" step="0.1" data-equip="thickScraper" data-eday="mon"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="thickScraper" data-eday="tue"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="thickScraper" data-eday="wed"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="thickScraper" data-eday="thu"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="thickScraper" data-eday="fri"></td></tr>
+      <tr><td>汚泥攪拌機</td><td><input type="number" inputmode="decimal" step="0.1" data-equip="sludgeMixer" data-eday="mon"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="sludgeMixer" data-eday="tue"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="sludgeMixer" data-eday="wed"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="sludgeMixer" data-eday="thu"></td><td><input type="number" inputmode="decimal" step="0.1" data-equip="sludgeMixer" data-eday="fri"></td></tr>
+    </tbody>
+  </table>
+</div>
+
+</div><!-- /equipPanel -->
+
 <!-- 操作ボタン -->
 <div class="actions">
   <button type="button" class="btn-copy" id="btnCopy">前日コピー</button>
@@ -554,6 +707,18 @@ const DAYS = ["mon", "tue", "wed", "thu", "nextMon"];
 const DAY_LABELS = { mon: "月", tue: "火", wed: "水", thu: "木", nextMon: "金" };
 const WEEKS = [1, 2, 3, 4, 5];
 
+// 機器運転時間の曜日キー（data-eday属性と一致）
+const EQUIP_DAYS = ["mon", "tue", "wed", "thu", "fri"];
+// 機器キー（data-equip属性と一致）
+const EQUIP_KEYS = [
+  "screenUnit", "mainPump1", "mainPump2",
+  "sludgePump1", "sludgePump2",
+  "aeration1", "aeration2", "aeration3",
+  "finalScraper",
+  "returnPump1", "returnPump2",
+  "thickPump", "thickScraper", "sludgeMixer"
+];
+
 // ===== グローバル状態 =====
 
 let weeklyData = {
@@ -564,6 +729,7 @@ let weeklyData = {
 
 let currentWeek = 1;
 let currentDay = "mon";
+let currentSheet = "water"; // "water" or "equip"
 let isOnline = false;
 
 // ===== ユーティリティ =====
@@ -580,9 +746,21 @@ function emptyWeek() {
   return w;
 }
 
+// 空の機器1週分データ（14機器 × 5曜日 = 70セル）
+function emptyEquipWeek() {
+  const w = {};
+  EQUIP_KEYS.forEach(k => {
+    w[k] = {};
+    EQUIP_DAYS.forEach(d => { w[k][d] = null; });
+  });
+  return w;
+}
+
 function ensureWeeklyStructure() {
   if (!weeklyData.weeks || typeof weeklyData.weeks !== "object") weeklyData.weeks = {};
+  if (!weeklyData.equipment || typeof weeklyData.equipment !== "object") weeklyData.equipment = {};
   WEEKS.forEach(w => {
+    // 日常水質
     if (!weeklyData.weeks[w]) weeklyData.weeks[w] = emptyWeek();
     DAYS.forEach(d => {
       if (!weeklyData.weeks[w][d]) weeklyData.weeks[w][d] = emptyDay();
@@ -590,6 +768,17 @@ function ensureWeeklyStructure() {
         if (!(k in weeklyData.weeks[w][d])) {
           weeklyData.weeks[w][d][k] = (k === "inspector") ? "" : null;
         }
+      });
+    });
+    // 機器運転時間
+    if (!weeklyData.equipment[w]) weeklyData.equipment[w] = emptyEquipWeek();
+    EQUIP_KEYS.forEach(k => {
+      if (!weeklyData.equipment[w][k]) {
+        weeklyData.equipment[w][k] = {};
+        EQUIP_DAYS.forEach(d => { weeklyData.equipment[w][k][d] = null; });
+      }
+      EQUIP_DAYS.forEach(d => {
+        if (!(d in weeklyData.equipment[w][k])) weeklyData.equipment[w][k][d] = null;
       });
     });
   });
@@ -635,6 +824,64 @@ function isDayFilled(weekIdx, dayKey) {
     const v = day[k];
     return v !== null && v !== undefined && v !== "";
   });
+}
+
+// ===== 機器運転時間フォーム <-> データ =====
+
+function saveEquipFormToData() {
+  const week = weeklyData.equipment[currentWeek];
+  document.querySelectorAll("[data-equip]").forEach(el => {
+    const key = el.dataset.equip;
+    const day = el.dataset.eday;
+    if (week[key]) {
+      week[key][day] = el.value === "" ? null : Number(el.value);
+    }
+  });
+}
+
+function loadEquipDataToForm() {
+  const week = weeklyData.equipment[currentWeek];
+  document.querySelectorAll("[data-equip]").forEach(el => {
+    const key = el.dataset.equip;
+    const day = el.dataset.eday;
+    const v = week[key] ? week[key][day] : null;
+    el.value = (v === null || v === undefined) ? "" : v;
+  });
+}
+
+function updateEquipWeekTabs() {
+  document.querySelectorAll("#equipWeekTabs button").forEach(btn => {
+    btn.classList.toggle("active", Number(btn.dataset.week) === currentWeek);
+  });
+}
+
+// ===== パネル切替 =====
+
+function switchMainTab(sheet) {
+  // 切替前にデータ保存
+  if (currentSheet === "water") {
+    saveFormToData();
+  } else {
+    saveEquipFormToData();
+  }
+  currentSheet = sheet;
+  const waterPanel = document.getElementById("waterPanel");
+  const equipPanel = document.getElementById("equipPanel");
+  document.querySelectorAll("#mainTabs button").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.sheet === sheet);
+  });
+  if (sheet === "water") {
+    waterPanel.style.display = "";
+    equipPanel.classList.remove("visible");
+    updateWeekTabs();
+    updateDayTabs();
+    loadDataToForm();
+  } else {
+    waterPanel.style.display = "none";
+    equipPanel.classList.add("visible");
+    updateEquipWeekTabs();
+    loadEquipDataToForm();
+  }
 }
 
 // ===== 接続状態表示 =====
@@ -719,7 +966,8 @@ function updateDayTabs() {
 
 function saveToStorage() {
   try {
-    saveFormToData();
+    if (currentSheet === "water") saveFormToData();
+    else saveEquipFormToData();
     weeklyData.targetMonth = document.getElementById("targetMonth").value || weeklyData.targetMonth;
     weeklyData.startDate = document.getElementById("startDate").value || weeklyData.startDate;
     localStorage.setItem(storageKey(), JSON.stringify(weeklyData));
@@ -741,7 +989,7 @@ function loadFromStorage() {
     const raw = localStorage.getItem(storageKey());
     if (raw) {
       const parsed = JSON.parse(raw);
-      weeklyData = Object.assign({ startDate: "", targetMonth: "", weeks: {} }, parsed);
+      weeklyData = Object.assign({ startDate: "", targetMonth: "", weeks: {}, equipment: {} }, parsed);
     }
   } catch (e) {}
   ensureWeeklyStructure();
@@ -838,10 +1086,29 @@ function showToast(msg, type) {
 // ===== イベントハンドラ =====
 
 function bindEvents() {
-  // 週タブ
+  // メインタブ（シート切替）
+  document.querySelectorAll("#mainTabs button").forEach(btn => {
+    btn.addEventListener("click", () => { switchMainTab(btn.dataset.sheet); });
+  });
+
+  // 機器運転時間の週タブ
+  document.querySelectorAll("#equipWeekTabs button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      saveEquipFormToData();
+      currentWeek = Number(btn.dataset.week);
+      updateEquipWeekTabs();
+      // 日常水質側の週タブも連動
+      updateWeekTabs();
+      loadEquipDataToForm();
+    });
+  });
+
+  // 週タブ（日常水質）
   document.querySelectorAll("#weekTabs button").forEach(btn => {
     btn.addEventListener("click", () => {
       switchTo(Number(btn.dataset.week), currentDay);
+      // 機器側の週タブも連動
+      updateEquipWeekTabs();
     });
   });
 
@@ -873,13 +1140,14 @@ function bindEvents() {
     const raw = localStorage.getItem("uedono_weekly_" + newMonth);
     if (raw) {
       try { weeklyData = JSON.parse(raw); } catch (err) {
-        weeklyData = { targetMonth: newMonth, startDate: "", weeks: {} };
+        weeklyData = { targetMonth: newMonth, startDate: "", weeks: {}, equipment: {} };
       }
     } else {
       weeklyData = {
         targetMonth: newMonth,
         startDate: estimateStartDate(newMonth),
-        weeks: {}
+        weeks: {},
+        equipment: {}
       };
     }
     weeklyData.targetMonth = newMonth;
