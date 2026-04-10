@@ -1527,22 +1527,79 @@ function loadFromStorage() {
 
 // ===== GASサーバー通信 =====
 
-// GASにデータを送信
-async function saveToServer() {
-  const payload = {
-    action: 'saveEverything',
-    month: weeklyData.targetMonth,
-    startDate: weeklyData.startDate,
-    weeks: weeklyData.weeks,
-    equipment: weeklyData.equipment,
-    electrical: weeklyData.electrical,
-    mechanical: weeklyData.mechanical
-  };
-  const res = await fetch(GAS_URL, {
+// タイムアウト付きfetch
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs || 15000);
+  try {
+    const res = await fetch(url, Object.assign({}, options, { signal: controller.signal }));
+    clearTimeout(timeoutId);
+    return res;
+  } catch (e) {
+    clearTimeout(timeoutId);
+    throw e;
+  }
+}
+
+// 現在のタブ＋週のデータだけをGASに送信
+async function saveCurrentToServer() {
+  let payload;
+  if (currentSheet === "water") {
+    payload = {
+      action: 'saveWeek',
+      month: weeklyData.targetMonth,
+      week: currentWeek,
+      startDate: weeklyData.startDate,
+      days: weeklyData.weeks[currentWeek]
+    };
+  } else if (currentSheet === "equip") {
+    payload = {
+      action: 'saveEquipmentWeek',
+      month: weeklyData.targetMonth,
+      week: currentWeek,
+      data: weeklyData.equipment[currentWeek]
+    };
+  } else if (currentSheet === "elec") {
+    payload = {
+      action: 'saveElectricalWeek',
+      month: weeklyData.targetMonth,
+      week: currentWeek,
+      data: weeklyData.electrical[currentWeek]
+    };
+  } else if (currentSheet === "mech") {
+    payload = {
+      action: 'saveMechanicalWeek',
+      month: weeklyData.targetMonth,
+      week: currentWeek,
+      data: weeklyData.mechanical[currentWeek]
+    };
+  }
+  const res = await fetchWithTimeout(GAS_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify(payload)
-  });
+  }, 15000);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return await res.json();
+}
+
+// 1シート全週を送信（全同期用）
+async function saveSheetToServer(sheetType) {
+  let payload;
+  if (sheetType === "water") {
+    payload = { action: 'saveAll', month: weeklyData.targetMonth, startDate: weeklyData.startDate, weeks: weeklyData.weeks };
+  } else if (sheetType === "equip") {
+    payload = { action: 'saveEquipment', month: weeklyData.targetMonth, equipment: weeklyData.equipment };
+  } else if (sheetType === "elec") {
+    payload = { action: 'saveElectrical', month: weeklyData.targetMonth, electrical: weeklyData.electrical };
+  } else if (sheetType === "mech") {
+    payload = { action: 'saveMechanical', month: weeklyData.targetMonth, mechanical: weeklyData.mechanical };
+  }
+  const res = await fetchWithTimeout(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify(payload)
+  }, 30000);
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return await res.json();
 }
@@ -1550,7 +1607,7 @@ async function saveToServer() {
 // GASからデータを取得（全シート）
 async function loadFromServer(month) {
   const url = GAS_URL + '?action=getAllData&month=' + encodeURIComponent(month);
-  const res = await fetch(url, { method: 'GET' });
+  const res = await fetchWithTimeout(url, { method: 'GET' }, 15000);
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return await res.json();
 }
@@ -1876,19 +1933,19 @@ function bindEvents() {
   document.getElementById("btnSave").addEventListener("click", async () => {
     const btnSave = document.getElementById("btnSave");
 
-    // a. まずlocalStorageに保存
+    // a. まずlocalStorageに全データ保存
     const ok = saveToStorage();
     if (!ok) {
       showToast("保存に失敗しました", "error");
       return;
     }
 
-    // b. GASに非同期でPOST送信
+    // b. 現在のタブ＋週だけGASに送信
     btnSave.textContent = "送信中...";
     btnSave.disabled = true;
 
     try {
-      await saveToServer();
+      await saveCurrentToServer();
       setConnectionStatus(true);
       showToast("保存しました（サーバー同期完了）");
     } catch (e) {
@@ -1900,32 +1957,47 @@ function bindEvents() {
     }
   });
 
-  // 同期ボタン
+  // 全同期ボタン（全シートを順番に送信）
   document.getElementById("btnSync").addEventListener("click", async () => {
     const btnSync = document.getElementById("btnSync");
-    btnSync.textContent = "同期中...";
     btnSync.disabled = true;
+    saveToStorage();
 
-    try {
-      // まず現在のデータをサーバーに送信
-      saveToStorage();
-      await saveToServer();
+    const steps = [
+      { sheet: "water", label: "水質同期中..." },
+      { sheet: "equip", label: "機器同期中..." },
+      { sheet: "elec",  label: "電気同期中..." },
+      { sheet: "mech",  label: "機械同期中..." }
+    ];
+    let allOk = true;
 
-      // サーバーから最新データを取得
-      const updated = await syncFromServer();
-      if (updated) {
-        showToast("サーバーと同期しました");
-      } else {
-        showToast("サーバーにデータがありません（端末データを送信済み）");
+    for (const step of steps) {
+      btnSync.textContent = step.label;
+      try {
+        await saveSheetToServer(step.sheet);
+      } catch (e) {
+        allOk = false;
+        setConnectionStatus(false);
+        showToast(step.label.replace("中...", "失敗"), "error");
+        break;
       }
-      setConnectionStatus(true);
-    } catch (e) {
-      setConnectionStatus(false);
-      showToast("同期に失敗しました", "error");
-    } finally {
-      btnSync.textContent = "同期";
-      btnSync.disabled = false;
     }
+
+    if (allOk) {
+      // サーバーから最新データも取得
+      btnSync.textContent = "取得中...";
+      try {
+        await syncFromServer();
+        setConnectionStatus(true);
+        showToast("全シートの同期が完了しました");
+      } catch (e) {
+        setConnectionStatus(true);
+        showToast("送信完了（サーバー取得はスキップ）", "warn");
+      }
+    }
+
+    btnSync.textContent = "同期";
+    btnSync.disabled = false;
   });
 
   // Excel出力ボタン
