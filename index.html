@@ -780,7 +780,7 @@ header h1 {
 
 <script>
 // ===== GAS URL =====
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzdR1QUVCLD8f0c4vP12F34z9I7wwpAIhCBr9FwmFYFsgKjv3U_duvM9ihG2EG1bDaZ/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbycdb4FxLJaxGB6xEOjUShm3SzzQinl1zITuvMY2qvF2jA6jwqScX0zfRqogTBTfCbQ/exec';
 
 // ===== 定数定義 =====
 
@@ -1530,10 +1530,13 @@ function loadFromStorage() {
 // GASにデータを送信
 async function saveToServer() {
   const payload = {
-    action: 'saveAll',
+    action: 'saveEverything',
     month: weeklyData.targetMonth,
     startDate: weeklyData.startDate,
-    weeks: weeklyData.weeks
+    weeks: weeklyData.weeks,
+    equipment: weeklyData.equipment,
+    electrical: weeklyData.electrical,
+    mechanical: weeklyData.mechanical
   };
   const res = await fetch(GAS_URL, {
     method: 'POST',
@@ -1544,36 +1547,135 @@ async function saveToServer() {
   return await res.json();
 }
 
-// GASからデータを取得
+// GASからデータを取得（全シート）
 async function loadFromServer(month) {
-  const url = GAS_URL + '?action=getData&month=' + encodeURIComponent(month);
+  const url = GAS_URL + '?action=getAllData&month=' + encodeURIComponent(month);
   const res = await fetch(url, { method: 'GET' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return await res.json();
 }
 
-// サーバーデータをマージ（サーバー側が新しければ上書き）
+// 機器運転時間: 日本語名→キー変換マップ
+const EQUIP_NAME_TO_KEY = {
+  "スクリーンユニット": "screenUnit",
+  "№１主ポンプ": "mainPump1", "№２主ポンプ": "mainPump2",
+  "№１汚泥ポンプ": "sludgePump1", "№２汚泥ポンプ": "sludgePump2",
+  "№１エアレーション装置": "aeration1", "№２エアレーション装置": "aeration2", "№３エアレーション装置": "aeration3",
+  "終沈汚泥かき寄せ機": "finalScraper",
+  "№１返流水ポンプ": "returnPump1", "№２返流水ポンプ": "returnPump2",
+  "濃縮汚泥ポンプ": "thickPump", "濃縮汚泥かき寄せ機": "thickScraper",
+  "汚泥攪拌機": "sludgeMixer"
+};
+
+// 曜日: 日本語→コード変換マップ
+const DAY_JP_TO_CODE = { "月": "mon", "火": "tue", "水": "wed", "木": "thu", "金": "fri" };
+
+// サーバーデータをマージ
 function mergeServerData(serverData) {
-  if (!serverData || !serverData.weeks) return false;
-  // サーバーからデータが取得できた場合、上書きする
-  weeklyData.weeks = serverData.weeks;
+  if (!serverData) return false;
+  let merged = false;
+
+  // water (日常水質)
+  if (serverData.water && typeof serverData.water === "object") {
+    // サーバーは { week: { day: { field: val } } } 形式
+    Object.keys(serverData.water).forEach(w => {
+      if (!weeklyData.weeks[w]) weeklyData.weeks[w] = emptyWeek();
+      const wData = serverData.water[w];
+      if (wData && typeof wData === "object") {
+        Object.keys(wData).forEach(d => {
+          const dayCode = DAY_JP_TO_CODE[d] || d;
+          if (weeklyData.weeks[w][dayCode]) {
+            Object.assign(weeklyData.weeks[w][dayCode], wData[d]);
+          }
+        });
+      }
+    });
+    merged = true;
+  }
+  // weeks直接形式（従来互換）
+  if (serverData.weeks && typeof serverData.weeks === "object" && Object.keys(serverData.weeks).length > 0) {
+    weeklyData.weeks = serverData.weeks;
+    merged = true;
+  }
+
+  // equipment (機器運転時間)
+  if (serverData.equipment && typeof serverData.equipment === "object") {
+    Object.keys(serverData.equipment).forEach(w => {
+      if (!weeklyData.equipment[w]) weeklyData.equipment[w] = emptyEquipWeek();
+      const wData = serverData.equipment[w];
+      if (wData && typeof wData === "object") {
+        Object.keys(wData).forEach(nameOrKey => {
+          const key = EQUIP_NAME_TO_KEY[nameOrKey] || nameOrKey;
+          if (weeklyData.equipment[w][key]) {
+            const dayData = wData[nameOrKey];
+            if (dayData && typeof dayData === "object") {
+              Object.keys(dayData).forEach(d => {
+                const dayCode = DAY_JP_TO_CODE[d] || d;
+                if (dayCode in weeklyData.equipment[w][key]) {
+                  weeklyData.equipment[w][key][dayCode] = dayData[d];
+                }
+              });
+            }
+          }
+        });
+      }
+    });
+    merged = true;
+  }
+
+  // electrical (電気設備)
+  if (serverData.electrical && typeof serverData.electrical === "object") {
+    Object.keys(serverData.electrical).forEach(w => {
+      if (!weeklyData.electrical[w]) weeklyData.electrical[w] = emptyElecWeek();
+      const wData = serverData.electrical[w];
+      if (wData && typeof wData === "object") {
+        Object.keys(wData).forEach(d => {
+          const dayCode = DAY_JP_TO_CODE[d] || d;
+          if (weeklyData.electrical[w][dayCode] && typeof wData[d] === "object") {
+            Object.assign(weeklyData.electrical[w][dayCode], wData[d]);
+          }
+        });
+      }
+    });
+    merged = true;
+  }
+
+  // mechanical (機械設備)
+  if (serverData.mechanical && typeof serverData.mechanical === "object") {
+    Object.keys(serverData.mechanical).forEach(w => {
+      if (!weeklyData.mechanical[w]) weeklyData.mechanical[w] = emptyMechWeek();
+      const wData = serverData.mechanical[w];
+      if (wData && typeof wData === "object") {
+        Object.keys(wData).forEach(d => {
+          const dayCode = DAY_JP_TO_CODE[d] || d;
+          if (weeklyData.mechanical[w][dayCode] && typeof wData[d] === "object") {
+            Object.assign(weeklyData.mechanical[w][dayCode], wData[d]);
+          }
+        });
+      }
+    });
+    merged = true;
+  }
+
   if (serverData.startDate) weeklyData.startDate = serverData.startDate;
   ensureWeeklyStructure();
-  // localStorageにも反映
   localStorage.setItem(storageKey(), JSON.stringify(weeklyData));
-  return true;
+  return merged;
 }
 
 // バックグラウンドでサーバーから取得
 async function syncFromServer() {
   try {
     const data = await loadFromServer(weeklyData.targetMonth);
-    if (data && data.weeks && Object.keys(data.weeks).length > 0) {
+    if (data && (data.weeks || data.water || data.equipment || data.electrical || data.mechanical)) {
       mergeServerData(data);
       // UI更新
       document.getElementById("startDate").value = weeklyData.startDate || "";
       updateDayTabs();
-      loadDataToForm();
+      if (currentSheet === "water") loadDataToForm();
+      else if (currentSheet === "equip") loadEquipDataToForm();
+      else if (currentSheet === "elec") loadElecDataToForm();
+      else if (currentSheet === "mech") loadMechDataToForm();
       setConnectionStatus(true);
       return true;
     }
