@@ -1037,7 +1037,7 @@ let weeklyData = {
 
 let currentWeek = 1;
 let currentDay = "mon";
-let currentSheet = "water"; // "water", "equip", "elec"
+let currentSheet = "water"; // "water", "equip", "elec", "mech"
 let isOnline = false;
 
 // ===== ユーティリティ =====
@@ -1554,33 +1554,35 @@ async function saveCurrentToServer() {
     };
   } else if (currentSheet === "equip") {
     payload = {
-      action: 'saveEquipmentWeek',
+      action: 'saveEquipment',
       month: weeklyData.targetMonth,
-      week: currentWeek,
-      data: weeklyData.equipment[currentWeek]
+      equipment: { [currentWeek]: weeklyData.equipment[currentWeek] }
     };
   } else if (currentSheet === "elec") {
     payload = {
-      action: 'saveElectricalWeek',
+      action: 'saveElectrical',
       month: weeklyData.targetMonth,
       week: currentWeek,
-      data: weeklyData.electrical[currentWeek]
+      electrical: { [currentWeek]: weeklyData.electrical[currentWeek] }
     };
   } else if (currentSheet === "mech") {
     payload = {
-      action: 'saveMechanicalWeek',
+      action: 'saveMechanical',
       month: weeklyData.targetMonth,
       week: currentWeek,
-      data: weeklyData.mechanical[currentWeek]
+      mechanical: { [currentWeek]: weeklyData.mechanical[currentWeek] }
     };
   }
+  console.log('送信データ:', JSON.stringify(payload).substring(0, 500));
   const res = await fetchWithTimeout(GAS_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify(payload)
   }, 15000);
   if (!res.ok) throw new Error('HTTP ' + res.status);
-  return await res.json();
+  const result = await res.json();
+  console.log('レスポンス:', JSON.stringify(result));
+  return result;
 }
 
 // 1シート全週を送信（全同期用）
