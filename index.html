@@ -394,6 +394,21 @@ header h1 {
   background: #fff;
   box-shadow: 0 0 0 2px rgba(13,79,52,0.15);
 }
+/* 列コピーボタン */
+.col-copy-btn {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #e0e0e0;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #444;
+  font-family: inherit;
+  margin-top: 2px;
+}
+.col-copy-btn:active { background: #bdbdbd; }
+
 /* コピー済み表示 */
 .equip-table input.copied,
 .equip-table button.copied {
@@ -687,11 +702,11 @@ header h1 {
     <thead>
       <tr>
         <th>機器名称</th>
-        <th>月<br><span class="equip-unit">hr</span></th>
-        <th>火<br><span class="equip-unit">hr</span></th>
-        <th>水<br><span class="equip-unit">hr</span></th>
-        <th>木<br><span class="equip-unit">hr</span></th>
-        <th>金<br><span class="equip-unit">hr</span></th>
+        <th>月<br><span class="equip-unit">hr</span><br><button type="button" class="col-copy-btn" data-copy-day="mon" data-copy-table="equip">←</button></th>
+        <th>火<br><span class="equip-unit">hr</span><br><button type="button" class="col-copy-btn" data-copy-day="tue" data-copy-table="equip">←</button></th>
+        <th>水<br><span class="equip-unit">hr</span><br><button type="button" class="col-copy-btn" data-copy-day="wed" data-copy-table="equip">←</button></th>
+        <th>木<br><span class="equip-unit">hr</span><br><button type="button" class="col-copy-btn" data-copy-day="thu" data-copy-table="equip">←</button></th>
+        <th>金<br><span class="equip-unit">hr</span><br><button type="button" class="col-copy-btn" data-copy-day="fri" data-copy-table="equip">←</button></th>
       </tr>
     </thead>
     <tbody>
@@ -731,7 +746,11 @@ header h1 {
     <thead>
       <tr>
         <th>項目</th>
-        <th>月</th><th>火</th><th>水</th><th>木</th><th>金</th>
+        <th>月<br><button type="button" class="col-copy-btn" data-copy-day="mon" data-copy-table="elec">←</button></th>
+        <th>火<br><button type="button" class="col-copy-btn" data-copy-day="tue" data-copy-table="elec">←</button></th>
+        <th>水<br><button type="button" class="col-copy-btn" data-copy-day="wed" data-copy-table="elec">←</button></th>
+        <th>木<br><button type="button" class="col-copy-btn" data-copy-day="thu" data-copy-table="elec">←</button></th>
+        <th>金<br><button type="button" class="col-copy-btn" data-copy-day="fri" data-copy-table="elec">←</button></th>
       </tr>
     </thead>
     <tbody id="elecBody">
@@ -757,7 +776,11 @@ header h1 {
     <thead>
       <tr>
         <th>項目</th>
-        <th>月</th><th>火</th><th>水</th><th>木</th><th>金</th>
+        <th>月<br><button type="button" class="col-copy-btn" data-copy-day="mon" data-copy-table="mech">←</button></th>
+        <th>火<br><button type="button" class="col-copy-btn" data-copy-day="tue" data-copy-table="mech">←</button></th>
+        <th>水<br><button type="button" class="col-copy-btn" data-copy-day="wed" data-copy-table="mech">←</button></th>
+        <th>木<br><button type="button" class="col-copy-btn" data-copy-day="thu" data-copy-table="mech">←</button></th>
+        <th>金<br><button type="button" class="col-copy-btn" data-copy-day="fri" data-copy-table="mech">←</button></th>
       </tr>
     </thead>
     <tbody id="mechBody">
@@ -1389,6 +1412,8 @@ function switchMainTab(sheet) {
   else if (currentSheet === "mech") saveMechFormToData();
 
   currentSheet = sheet;
+  // 前日コピーボタンは日常水質タブでのみ表示
+  document.getElementById("btnCopy").style.display = (sheet === "water") ? "" : "none";
   const waterPanel = document.getElementById("waterPanel");
   const equipPanel = document.getElementById("equipPanel");
   const elecPanel = document.getElementById("elecPanel");
@@ -1917,82 +1942,86 @@ function bindEvents() {
   });
 
   // 前日コピー
+  // 前日コピー（日常水質タブ専用）
   document.getElementById("btnCopy").addEventListener("click", () => {
-    // 前日を特定する共通ヘルパー（曜日配列とcurrentDayからソース週・日を返す）
-    function findPrevDay(daysArr) {
-      // currentDayをdaysArr内のキーにマッピング（nextMon→friなど水質特有のキーを変換）
-      const dayKey = (currentDay === "nextMon" && daysArr.indexOf("nextMon") < 0) ? "fri" : currentDay;
-      const idx = daysArr.indexOf(dayKey);
-      if (idx < 0) return null; // 現在の曜日がこのタブに存在しない
-      if (idx > 0) {
-        return { week: currentWeek, day: daysArr[idx - 1], label: DAY_LABELS[daysArr[idx - 1]] || daysArr[idx - 1] };
-      }
-      // 先頭（月曜） → 前週の最後の曜日
-      if (currentWeek > 1) {
-        const lastDay = daysArr[daysArr.length - 1];
-        return { week: currentWeek - 1, day: lastDay, label: "第" + (currentWeek - 1) + "週" + (DAY_LABELS[lastDay] || lastDay) };
-      }
-      return null; // コピー元なし
+    if (currentSheet !== "water") return;
+    saveFormToData();
+    const order = ["mon", "tue", "wed", "thu", "nextMon"];
+    const idx = order.indexOf(currentDay);
+    let srcWeek = currentWeek, srcDay;
+    console.log("前日コピー: currentDay=" + currentDay + ", idx=" + idx + ", currentWeek=" + currentWeek);
+    if (idx > 0) {
+      srcDay = order[idx - 1];
+    } else if (currentWeek > 1) {
+      srcWeek = currentWeek - 1;
+      srcDay = order[order.length - 1]; // 前週の金曜(nextMon)
+    } else {
+      showToast("コピー元の前日がありません", "error");
+      return;
     }
+    const srcLabel = (srcWeek !== currentWeek ? "第" + srcWeek + "週" : "") + (DAY_LABELS[srcDay] || srcDay);
+    console.log("コピー元: week=" + srcWeek + ", day=" + srcDay + " → コピー先: week=" + currentWeek + ", day=" + currentDay);
+    const src = weeklyData.weeks[srcWeek][srcDay];
+    const dst = weeklyData.weeks[currentWeek][currentDay];
+    COPY_FIELDS.forEach(k => { dst[k] = src[k]; });
+    loadDataToForm();
+    updateDayTabs();
+    showToast(srcLabel + "から" + (DAY_LABELS[currentDay] || currentDay) + "にコピーしました");
+  });
 
-    if (currentSheet === "water") {
-      // 日常水質: 水質データのみコピー（積算値除外）
-      saveFormToData();
-      const prev = findPrevDay(["mon", "tue", "wed", "thu", "nextMon"]);
-      if (!prev) { showToast("コピー元の前日がありません", "error"); return; }
-      const src = weeklyData.weeks[prev.week][prev.day];
-      const dst = weeklyData.weeks[currentWeek][currentDay];
-      COPY_FIELDS.forEach(k => { dst[k] = src[k]; });
-      loadDataToForm();
-      updateDayTabs();
-      showToast(prev.label + "からコピーしました");
+  // 列コピー共通関数（テーブル形式タブ用: ← ボタンから呼ばれる）
+  function copyColumn(tableType, targetDay) {
+    const daysArr = (tableType === "mech") ? MECH_DAYS : EQUIP_DAYS;
+    const idx = daysArr.indexOf(targetDay);
+    if (idx < 0) return;
+    let srcWeek = currentWeek, srcDay;
+    if (idx > 0) {
+      srcDay = daysArr[idx - 1];
+    } else if (currentWeek > 1) {
+      srcWeek = currentWeek - 1;
+      srcDay = daysArr[daysArr.length - 1];
+    } else {
+      showToast("コピー元の前日がありません", "error");
+      return;
+    }
+    const srcLabel = (srcWeek !== currentWeek ? "第" + srcWeek + "週" : "") + (DAY_LABELS[srcDay] || srcDay);
 
-    } else if (currentSheet === "equip") {
-      // 機器運転時間: currentDayの列だけにコピー
+    if (tableType === "equip") {
       saveEquipFormToData();
-      const dayKey = (currentDay === "nextMon") ? "fri" : currentDay;
-      const prev = findPrevDay(EQUIP_DAYS);
-      if (!prev) { showToast("コピー元の前日がありません", "error"); return; }
       EQUIP_KEYS.forEach(k => {
-        weeklyData.equipment[currentWeek][k][dayKey] = weeklyData.equipment[prev.week][k][prev.day];
+        weeklyData.equipment[currentWeek][k][targetDay] = weeklyData.equipment[srcWeek][k][srcDay];
       });
       loadEquipDataToForm();
-      // コピー先列だけ色付け
-      document.querySelectorAll('#equipTable [data-eday="' + dayKey + '"]').forEach(el => {
+      document.querySelectorAll('#equipTable [data-eday="' + targetDay + '"]').forEach(el => {
         el.classList.add("copied");
       });
-      showToast(prev.label + "から" + (DAY_LABELS[dayKey] || dayKey) + "にコピーしました");
-
-    } else if (currentSheet === "elec") {
-      // 電気設備: currentDayの列だけにコピー
+    } else if (tableType === "elec") {
       saveElecFormToData();
-      const dayKey = (currentDay === "nextMon") ? "fri" : currentDay;
-      const prev = findPrevDay(EQUIP_DAYS);
-      if (!prev) { showToast("コピー元の前日がありません", "error"); return; }
-      const srcData = weeklyData.electrical[prev.week][prev.day];
-      const dstData = weeklyData.electrical[currentWeek][dayKey];
+      const srcData = weeklyData.electrical[srcWeek][srcDay];
+      const dstData = weeklyData.electrical[currentWeek][targetDay];
       ALL_ELEC_KEYS.forEach(k => { dstData[k] = srcData[k]; });
       loadElecDataToForm();
-      document.querySelectorAll('#elecTable [data-eday="' + dayKey + '"]').forEach(el => {
+      document.querySelectorAll('#elecTable [data-eday="' + targetDay + '"]').forEach(el => {
         el.classList.add("copied");
       });
-      showToast(prev.label + "から" + (DAY_LABELS[dayKey] || dayKey) + "にコピーしました");
-
-    } else if (currentSheet === "mech") {
-      // 機械設備: currentDayの列だけにコピー
+    } else if (tableType === "mech") {
       saveMechFormToData();
-      const dayKey = (currentDay === "nextMon") ? "fri" : currentDay;
-      const prev = findPrevDay(MECH_DAYS);
-      if (!prev) { showToast("コピー元の前日がありません", "error"); return; }
-      const srcData = weeklyData.mechanical[prev.week][prev.day];
-      const dstData = weeklyData.mechanical[currentWeek][dayKey];
+      const srcData = weeklyData.mechanical[srcWeek][srcDay];
+      const dstData = weeklyData.mechanical[currentWeek][targetDay];
       ALL_MECH_KEYS.forEach(k => { dstData[k] = srcData[k]; });
       loadMechDataToForm();
-      document.querySelectorAll('#mechTable [data-mday="' + dayKey + '"]').forEach(el => {
+      document.querySelectorAll('#mechTable [data-mday="' + targetDay + '"]').forEach(el => {
         el.classList.add("copied");
       });
-      showToast(prev.label + "から" + (DAY_LABELS[dayKey] || dayKey) + "にコピーしました");
     }
+    showToast(srcLabel + "→" + (DAY_LABELS[targetDay] || targetDay) + " コピー完了");
+  }
+
+  // 列コピーボタン（←）のイベント
+  document.querySelectorAll(".col-copy-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      copyColumn(btn.dataset.copyTable, btn.dataset.copyDay);
+    });
   });
 
   // 全クリア（現在の日のみ）
