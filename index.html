@@ -394,6 +394,12 @@ header h1 {
   background: #fff;
   box-shadow: 0 0 0 2px rgba(13,79,52,0.15);
 }
+/* コピー済み表示 */
+.equip-table input.copied,
+.equip-table button.copied {
+  background-color: #e3f2fd !important;
+}
+
 .equip-unit {
   font-size: 11px;
   color: #888;
@@ -1247,6 +1253,7 @@ function buildElecTable() {
       const newVal = (idx === opts.length - 1) ? "" : (idx < 0 ? opts[0] : opts[idx + 1]);
       btn.dataset.val = newVal;
       btn.textContent = newVal;
+      btn.classList.remove("copied");
       // データに即時反映
       const week = weeklyData.electrical[currentWeek];
       if (week && week[btn.dataset.eday]) {
@@ -1327,6 +1334,7 @@ function buildMechTable() {
       const newVal = (idx === opts.length - 1) ? "" : (idx < 0 ? opts[0] : opts[idx + 1]);
       btn.dataset.val = newVal;
       btn.textContent = newVal;
+      btn.classList.remove("copied");
       const week = weeklyData.mechanical[currentWeek];
       if (week && week[btn.dataset.mday]) {
         week[btn.dataset.mday][btn.dataset.mech] = newVal || null;
@@ -1786,6 +1794,19 @@ function bindEvents() {
   buildElecTable();
   buildMechTable();
 
+  // 手動入力時にcopiedクラスを削除（機器運転時間）
+  document.querySelectorAll("#equipTable [data-equip]").forEach(el => {
+    el.addEventListener("input", () => { el.classList.remove("copied"); });
+  });
+  // 電気・機械はbuildElecTable/buildMechTable内のトグルボタンにも対応
+  // （numberのinputイベントはbuild関数内で生成済みのため、ここでまとめて設定）
+  document.querySelectorAll("#elecTable [data-elec]").forEach(el => {
+    if (el.tagName === "INPUT") el.addEventListener("input", () => { el.classList.remove("copied"); });
+  });
+  document.querySelectorAll("#mechTable [data-mech]").forEach(el => {
+    if (el.tagName === "INPUT") el.addEventListener("input", () => { el.classList.remove("copied"); });
+  });
+
   // 機械設備の週タブ
   document.querySelectorAll("#mechWeekTabs button").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -1897,28 +1918,96 @@ function bindEvents() {
 
   // 前日コピー
   document.getElementById("btnCopy").addEventListener("click", () => {
-    saveFormToData();
-    const order = ["mon", "tue", "wed", "thu", "nextMon"];
-    const idx = order.indexOf(currentDay);
-    let src = null;
-    let srcLabel = "";
+    if (currentSheet === "water") {
+      // 日常水質: 既存の動作（水質データのみコピー）
+      saveFormToData();
+      const order = ["mon", "tue", "wed", "thu", "nextMon"];
+      const idx = order.indexOf(currentDay);
+      let src = null;
+      let srcLabel = "";
+      if (idx > 0) {
+        src = weeklyData.weeks[currentWeek][order[idx - 1]];
+        srcLabel = DAY_LABELS[order[idx - 1]] + "曜日";
+      } else if (currentWeek > 1) {
+        src = weeklyData.weeks[currentWeek - 1].thu;
+        srcLabel = "第" + (currentWeek - 1) + "週の木曜";
+      } else {
+        showToast("コピー元の前日がありません", "error");
+        return;
+      }
+      const dst = weeklyData.weeks[currentWeek][currentDay];
+      COPY_FIELDS.forEach(k => { dst[k] = src[k]; });
+      loadDataToForm();
+      updateDayTabs();
+      showToast(srcLabel + "からコピーしました");
 
-    if (idx > 0) {
-      src = weeklyData.weeks[currentWeek][order[idx - 1]];
-      srcLabel = DAY_LABELS[order[idx - 1]] + "曜日";
-    } else if (currentWeek > 1) {
-      src = weeklyData.weeks[currentWeek - 1].thu;
-      srcLabel = "第" + (currentWeek - 1) + "週の木曜";
-    } else {
-      showToast("コピー元の前日がありません", "error");
-      return;
+    } else if (currentSheet === "equip") {
+      // 機器運転時間: 各日を前日からコピー（月←前週金）
+      saveEquipFormToData();
+      const days = EQUIP_DAYS; // ["mon","tue","wed","thu","fri"]
+      for (let i = 0; i < days.length; i++) {
+        let srcWeek, srcDay;
+        if (i === 0) {
+          if (currentWeek > 1) { srcWeek = currentWeek - 1; srcDay = "fri"; }
+          else continue;
+        } else {
+          srcWeek = currentWeek; srcDay = days[i - 1];
+        }
+        EQUIP_KEYS.forEach(k => {
+          weeklyData.equipment[currentWeek][k][days[i]] = weeklyData.equipment[srcWeek][k][srcDay];
+        });
+      }
+      loadEquipDataToForm();
+      // コピー済み色付け
+      document.querySelectorAll("#equipTable [data-equip]").forEach(el => {
+        el.classList.add("copied");
+      });
+      showToast("前日データをコピーしました");
+
+    } else if (currentSheet === "elec") {
+      // 電気設備: 各日を前日からコピー
+      saveElecFormToData();
+      const days = EQUIP_DAYS;
+      for (let i = 0; i < days.length; i++) {
+        let srcWeek, srcDay;
+        if (i === 0) {
+          if (currentWeek > 1) { srcWeek = currentWeek - 1; srcDay = "fri"; }
+          else continue;
+        } else {
+          srcWeek = currentWeek; srcDay = days[i - 1];
+        }
+        const srcData = weeklyData.electrical[srcWeek][srcDay];
+        const dstData = weeklyData.electrical[currentWeek][days[i]];
+        ALL_ELEC_KEYS.forEach(k => { dstData[k] = srcData[k]; });
+      }
+      loadElecDataToForm();
+      document.querySelectorAll("#elecTable [data-elec]").forEach(el => {
+        el.classList.add("copied");
+      });
+      showToast("前日データをコピーしました");
+
+    } else if (currentSheet === "mech") {
+      // 機械設備: 各日を前日からコピー
+      saveMechFormToData();
+      const days = MECH_DAYS;
+      for (let i = 0; i < days.length; i++) {
+        let srcWeek, srcDay;
+        if (i === 0) {
+          if (currentWeek > 1) { srcWeek = currentWeek - 1; srcDay = days[days.length - 1]; }
+          else continue;
+        } else {
+          srcWeek = currentWeek; srcDay = days[i - 1];
+        }
+        const srcData = weeklyData.mechanical[srcWeek][srcDay];
+        const dstData = weeklyData.mechanical[currentWeek][days[i]];
+        ALL_MECH_KEYS.forEach(k => { dstData[k] = srcData[k]; });
+      }
+      loadMechDataToForm();
+      document.querySelectorAll("#mechTable [data-mech]").forEach(el => {
+        el.classList.add("copied");
+      });
+      showToast("前日データをコピーしました");
     }
-
-    const dst = weeklyData.weeks[currentWeek][currentDay];
-    COPY_FIELDS.forEach(k => { dst[k] = src[k]; });
-    loadDataToForm();
-    updateDayTabs();
-    showToast(srcLabel + "からコピーしました");
   });
 
   // 全クリア（現在の日のみ）
