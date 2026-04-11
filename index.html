@@ -178,11 +178,11 @@ header h1 {
 .field input[type="number"],
 .field input[type="text"] {
   width: 130px;
-  height: 44px;
+  height: 50px;
   padding: 8px 12px;
   border: 1px solid #ccd;
   border-radius: 8px;
-  font-size: 16px;
+  font-size: 18px;
   text-align: right;
   font-family: inherit;
   background: #fafbfc;
@@ -201,6 +201,12 @@ header h1 {
   gap: 8px;
   padding: 12px;
   flex-wrap: wrap;
+  position: sticky;
+  bottom: 0;
+  z-index: 50;
+  background: rgba(240,242,245,0.92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 .actions button {
   flex: 1;
@@ -213,7 +219,7 @@ header h1 {
   cursor: pointer;
   font-family: inherit;
   transition: transform 0.05s, box-shadow 0.15s;
-  min-height: 48px;
+  min-height: 52px;
 }
 .actions button:active { transform: scale(0.97); }
 .btn-copy {
@@ -378,12 +384,12 @@ header h1 {
 }
 .equip-table tbody tr:last-child td { border-bottom: none; }
 .equip-table input[type="number"] {
-  width: 60px;
-  height: 40px;
-  padding: 4px;
+  width: 64px;
+  height: 44px;
+  padding: 6px 4px;
   border: 1px solid #ccd;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 16px;
   text-align: right;
   font-family: inherit;
   background: #fafbfc;
@@ -437,8 +443,8 @@ header h1 {
 }
 /* トグルボタン（○△×選択） */
 .toggle-btn {
-  width: 50px;
-  height: 40px;
+  min-width: 55px;
+  height: 44px;
   border: 1px solid #ccd;
   border-radius: 6px;
   background: #fafbfc;
@@ -447,8 +453,8 @@ header h1 {
   cursor: pointer;
   font-family: inherit;
   color: #666;
-  padding: 0;
-  line-height: 40px;
+  padding: 0 4px;
+  line-height: 44px;
   text-align: center;
 }
 .toggle-btn[data-val="○"] { background: #c8e6c9; color: #2e7d32; border-color: #a5d6a7; }
@@ -2160,6 +2166,38 @@ async function init() {
   // b. バックグラウンドでGASからデータ取得（接続確認を兼ねる）
   syncFromServer();
 }
+
+// ===== スマホUX改善 =====
+
+// inputタップ時に全選択＋スクロール、Enterで次のinputへ移動
+document.addEventListener("focusin", (e) => {
+  const el = e.target;
+  if (el.tagName === "INPUT" && (el.type === "number" || el.type === "text")) {
+    // 全選択
+    setTimeout(() => { el.select(); }, 50);
+    // 画面中央にスクロール
+    setTimeout(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 150);
+  }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  const el = e.target;
+  if (!el || el.tagName !== "INPUT") return;
+  e.preventDefault();
+  // 同じコンテナ内の全inputを取得して次に移動
+  const container = el.closest(".form-wrap, .equip-wrap");
+  if (!container) { el.blur(); return; }
+  const inputs = Array.from(container.querySelectorAll('input[type="number"], input[type="text"]'));
+  const idx = inputs.indexOf(el);
+  if (idx >= 0 && idx < inputs.length - 1) {
+    inputs[idx + 1].focus();
+  } else {
+    el.blur(); // 最後のinputならキーボードを閉じる
+  }
+});
 
 init();
 </script>
