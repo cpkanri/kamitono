@@ -414,6 +414,20 @@ header h1 {
   margin-top: 2px;
 }
 .col-copy-btn:active { background: #bdbdbd; }
+.col-clear-btn {
+  display: none;
+  padding: 2px 6px;
+  background: #ffcdd2;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #c62828;
+  font-family: inherit;
+  margin-top: 2px;
+}
+.col-clear-btn.visible { display: inline-block; }
+.col-clear-btn:active { background: #ef9a9a; }
 
 /* コピー済み表示 */
 .equip-table input.copied,
@@ -708,11 +722,11 @@ header h1 {
     <thead>
       <tr>
         <th>機器名称</th>
-        <th>月<br><span class="equip-unit">hr</span><br><button type="button" class="col-copy-btn" data-copy-day="mon" data-copy-table="equip">←</button></th>
-        <th>火<br><span class="equip-unit">hr</span><br><button type="button" class="col-copy-btn" data-copy-day="tue" data-copy-table="equip">←</button></th>
-        <th>水<br><span class="equip-unit">hr</span><br><button type="button" class="col-copy-btn" data-copy-day="wed" data-copy-table="equip">←</button></th>
-        <th>木<br><span class="equip-unit">hr</span><br><button type="button" class="col-copy-btn" data-copy-day="thu" data-copy-table="equip">←</button></th>
-        <th>金<br><span class="equip-unit">hr</span><br><button type="button" class="col-copy-btn" data-copy-day="fri" data-copy-table="equip">←</button></th>
+        <th>月<br><span class="equip-unit">hr</span><br><button type="button" class="col-copy-btn" data-copy-day="mon" data-copy-table="equip">←</button><button type="button" class="col-clear-btn" data-clear-day="mon" data-clear-table="equip">×</button></th>
+        <th>火<br><span class="equip-unit">hr</span><br><button type="button" class="col-copy-btn" data-copy-day="tue" data-copy-table="equip">←</button><button type="button" class="col-clear-btn" data-clear-day="tue" data-clear-table="equip">×</button></th>
+        <th>水<br><span class="equip-unit">hr</span><br><button type="button" class="col-copy-btn" data-copy-day="wed" data-copy-table="equip">←</button><button type="button" class="col-clear-btn" data-clear-day="wed" data-clear-table="equip">×</button></th>
+        <th>木<br><span class="equip-unit">hr</span><br><button type="button" class="col-copy-btn" data-copy-day="thu" data-copy-table="equip">←</button><button type="button" class="col-clear-btn" data-clear-day="thu" data-clear-table="equip">×</button></th>
+        <th>金<br><span class="equip-unit">hr</span><br><button type="button" class="col-copy-btn" data-copy-day="fri" data-copy-table="equip">←</button><button type="button" class="col-clear-btn" data-clear-day="fri" data-clear-table="equip">×</button></th>
       </tr>
     </thead>
     <tbody>
@@ -752,11 +766,11 @@ header h1 {
     <thead>
       <tr>
         <th>項目</th>
-        <th>月<br><button type="button" class="col-copy-btn" data-copy-day="mon" data-copy-table="elec">←</button></th>
-        <th>火<br><button type="button" class="col-copy-btn" data-copy-day="tue" data-copy-table="elec">←</button></th>
-        <th>水<br><button type="button" class="col-copy-btn" data-copy-day="wed" data-copy-table="elec">←</button></th>
-        <th>木<br><button type="button" class="col-copy-btn" data-copy-day="thu" data-copy-table="elec">←</button></th>
-        <th>金<br><button type="button" class="col-copy-btn" data-copy-day="fri" data-copy-table="elec">←</button></th>
+        <th>月<br><button type="button" class="col-copy-btn" data-copy-day="mon" data-copy-table="elec">←</button><button type="button" class="col-clear-btn" data-clear-day="mon" data-clear-table="elec">×</button></th>
+        <th>火<br><button type="button" class="col-copy-btn" data-copy-day="tue" data-copy-table="elec">←</button><button type="button" class="col-clear-btn" data-clear-day="tue" data-clear-table="elec">×</button></th>
+        <th>水<br><button type="button" class="col-copy-btn" data-copy-day="wed" data-copy-table="elec">←</button><button type="button" class="col-clear-btn" data-clear-day="wed" data-clear-table="elec">×</button></th>
+        <th>木<br><button type="button" class="col-copy-btn" data-copy-day="thu" data-copy-table="elec">←</button><button type="button" class="col-clear-btn" data-clear-day="thu" data-clear-table="elec">×</button></th>
+        <th>金<br><button type="button" class="col-copy-btn" data-copy-day="fri" data-copy-table="elec">←</button><button type="button" class="col-clear-btn" data-clear-day="fri" data-clear-table="elec">×</button></th>
       </tr>
     </thead>
     <tbody id="elecBody">
@@ -782,11 +796,11 @@ header h1 {
     <thead>
       <tr>
         <th>項目</th>
-        <th>月<br><button type="button" class="col-copy-btn" data-copy-day="mon" data-copy-table="mech">←</button></th>
-        <th>火<br><button type="button" class="col-copy-btn" data-copy-day="tue" data-copy-table="mech">←</button></th>
-        <th>水<br><button type="button" class="col-copy-btn" data-copy-day="wed" data-copy-table="mech">←</button></th>
-        <th>木<br><button type="button" class="col-copy-btn" data-copy-day="thu" data-copy-table="mech">←</button></th>
-        <th>金<br><button type="button" class="col-copy-btn" data-copy-day="fri" data-copy-table="mech">←</button></th>
+        <th>月<br><button type="button" class="col-copy-btn" data-copy-day="mon" data-copy-table="mech">←</button><button type="button" class="col-clear-btn" data-clear-day="mon" data-clear-table="mech">×</button></th>
+        <th>火<br><button type="button" class="col-copy-btn" data-copy-day="tue" data-copy-table="mech">←</button><button type="button" class="col-clear-btn" data-clear-day="tue" data-clear-table="mech">×</button></th>
+        <th>水<br><button type="button" class="col-copy-btn" data-copy-day="wed" data-copy-table="mech">←</button><button type="button" class="col-clear-btn" data-clear-day="wed" data-clear-table="mech">×</button></th>
+        <th>木<br><button type="button" class="col-copy-btn" data-copy-day="thu" data-copy-table="mech">←</button><button type="button" class="col-clear-btn" data-clear-day="thu" data-clear-table="mech">×</button></th>
+        <th>金<br><button type="button" class="col-copy-btn" data-copy-day="fri" data-copy-table="mech">←</button><button type="button" class="col-clear-btn" data-clear-day="fri" data-clear-table="mech">×</button></th>
       </tr>
     </thead>
     <tbody id="mechBody">
@@ -2031,6 +2045,45 @@ function bindEvents() {
   });
 
   // 全クリア（現在の日のみ）
+  // 列クリア共通関数
+  function clearColumn(tableType, targetDay) {
+    const dayLabel = DAY_LABELS[targetDay] || targetDay;
+    if (!confirm("第" + currentWeek + "週 " + dayLabel + " のデータをクリアしますか？")) return;
+    if (tableType === "equip") {
+      EQUIP_KEYS.forEach(k => { weeklyData.equipment[currentWeek][k][targetDay] = null; });
+      loadEquipDataToForm();
+    } else if (tableType === "elec") {
+      weeklyData.electrical[currentWeek][targetDay] = emptyElecDay();
+      loadElecDataToForm();
+    } else if (tableType === "mech") {
+      weeklyData.mechanical[currentWeek][targetDay] = emptyMechDay();
+      loadMechDataToForm();
+    }
+    showToast("第" + currentWeek + "週 " + dayLabel + " をクリアしました");
+    hideClearButtons();
+  }
+
+  // ×ボタンの表示/非表示
+  let clearBtnTimer = null;
+  function showClearButtons() {
+    document.querySelectorAll(".col-clear-btn").forEach(btn => btn.classList.add("visible"));
+    if (clearBtnTimer) clearTimeout(clearBtnTimer);
+    clearBtnTimer = setTimeout(hideClearButtons, 3000);
+  }
+  function hideClearButtons() {
+    document.querySelectorAll(".col-clear-btn").forEach(btn => btn.classList.remove("visible"));
+    if (clearBtnTimer) { clearTimeout(clearBtnTimer); clearBtnTimer = null; }
+  }
+
+  // 列クリアボタン（×）のイベント
+  document.querySelectorAll(".col-clear-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      clearColumn(btn.dataset.clearTable, btn.dataset.clearDay);
+    });
+  });
+
+  // 全クリアボタン
   document.getElementById("btnClear").addEventListener("click", () => {
     if (currentSheet === "water") {
       const label = "第" + currentWeek + "週 " + DAY_LABELS[currentDay] + " の日常水質";
@@ -2039,21 +2092,10 @@ function bindEvents() {
       loadDataToForm();
       updateDayTabs();
       showToast(label + " をクリアしました");
-    } else if (currentSheet === "equip") {
-      if (!confirm("第" + currentWeek + "週の機器運転時間データをクリアしますか？")) return;
-      weeklyData.equipment[currentWeek] = emptyEquipWeek();
-      loadEquipDataToForm();
-      showToast("第" + currentWeek + "週の機器運転時間をクリアしました");
-    } else if (currentSheet === "elec") {
-      if (!confirm("第" + currentWeek + "週の電気設備データをクリアしますか？")) return;
-      weeklyData.electrical[currentWeek] = emptyElecWeek();
-      loadElecDataToForm();
-      showToast("第" + currentWeek + "週の電気設備をクリアしました");
-    } else if (currentSheet === "mech") {
-      if (!confirm("第" + currentWeek + "週の機械設備データをクリアしますか？")) return;
-      weeklyData.mechanical[currentWeek] = emptyMechWeek();
-      loadMechDataToForm();
-      showToast("第" + currentWeek + "週の機械設備をクリアしました");
+    } else {
+      // テーブル形式タブ: ×ボタンをトグル表示
+      const anyVisible = document.querySelector(".col-clear-btn.visible");
+      if (anyVisible) { hideClearButtons(); } else { showClearButtons(); }
     }
   });
 
@@ -2199,23 +2241,19 @@ document.addEventListener("focusin", (e) => {
   }
 });
 
-document.addEventListener("keydown", (e) => {
-  if (e.key !== "Enter") return;
-  const el = e.target;
-  if (!el || el.tagName !== "INPUT") return;
-  e.preventDefault();
-  // 画面内の表示中(visible)のinputを全て取得してDOM順で次に移動
-  const allInputs = Array.from(document.querySelectorAll('input[type="number"], input[type="text"]'));
-  const visibleInputs = allInputs.filter(inp => {
-    if (inp.offsetParent === null) return false; // display:none等
-    const rect = inp.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
-  });
-  const idx = visibleInputs.indexOf(el);
-  if (idx >= 0 && idx < visibleInputs.length - 1) {
-    visibleInputs[idx + 1].focus();
-  } else {
-    el.blur();
+document.addEventListener("keydown", function(e) {
+  if (e.key === "Enter" && e.target.tagName === "INPUT") {
+    e.preventDefault();
+    var inputs = Array.from(document.querySelectorAll('input[type="number"], input[type="text"]')).filter(function(el) {
+      return el.offsetParent !== null && el.offsetWidth > 0 && el.offsetHeight > 0;
+    });
+    var idx = inputs.indexOf(e.target);
+    if (idx >= 0 && idx < inputs.length - 1) {
+      inputs[idx + 1].focus();
+      inputs[idx + 1].select();
+    } else {
+      e.target.blur();
+    }
   }
 });
 
