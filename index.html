@@ -230,6 +230,15 @@ header h1 {
   background: #fdecea;
   color: #b3261e;
 }
+.btn-undo {
+  background: #fff;
+  color: #555;
+  border: 1px solid #ccc !important;
+  font-size: 14px;
+  flex: 0 0 auto !important;
+  min-width: 70px !important;
+}
+.btn-undo:disabled { opacity: 0.4; }
 .btn-save {
   background: linear-gradient(135deg, #0d4f34, #1a7a56);
   color: #fff;
@@ -814,6 +823,7 @@ header h1 {
 <div class="actions">
   <button type="button" class="btn-copy" id="btnCopy">前日コピー</button>
   <button type="button" class="btn-clear" id="btnClear">全クリア</button>
+  <button type="button" class="btn-undo" id="btnUndo" disabled>↩ 戻す</button>
   <button type="button" class="btn-save" id="btnSave">保存</button>
   <button type="button" class="btn-sync" id="btnSync">同期</button>
 </div>
@@ -1463,6 +1473,8 @@ function switchMainTab(sheet) {
     updateMechWeekTabs();
     loadMechDataToForm();
   }
+  // タブ切替後にtabindex再設定
+  setTimeout(updateTabIndexes, 100);
 }
 
 // ===== 接続状態表示 =====
@@ -2125,6 +2137,9 @@ function bindEvents() {
       btnSave.textContent = "保存";
       btnSave.disabled = false;
     }
+    // 保存後にundoスタックをクリア
+    undoStack = [];
+    updateUndoBtn();
   });
 
   // 全同期ボタン（全シートを順番に送信）
@@ -2228,25 +2243,38 @@ async function init() {
 
 // ===== スマホUX改善 =====
 
-// inputタップ時に全選択＋スクロール、Enterで次のinputへ移動
-document.addEventListener("focusin", (e) => {
-  const el = e.target;
+// visibleなinput一覧を取得
+function getVisibleInputs() {
+  return Array.from(document.querySelectorAll('input[type="number"], input[type="text"]')).filter(function(el) {
+    return el.offsetParent !== null && el.offsetWidth > 0 && el.offsetHeight > 0;
+  });
+}
+
+// tabindexとenterkeyhintを連番で設定
+function updateTabIndexes() {
+  var inputs = getVisibleInputs();
+  for (var i = 0; i < inputs.length; i++) {
+    inputs[i].setAttribute("tabindex", i + 1);
+    inputs[i].setAttribute("enterkeyhint", (i < inputs.length - 1) ? "next" : "done");
+  }
+}
+
+// inputタップ時に全選択＋スクロール
+document.addEventListener("focusin", function(e) {
+  var el = e.target;
   if (el.tagName === "INPUT" && (el.type === "number" || el.type === "text")) {
-    // 全選択
-    setTimeout(() => { el.select(); }, 50);
-    // 画面中央にスクロール
-    setTimeout(() => {
+    setTimeout(function() { el.select(); }, 50);
+    setTimeout(function() {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 150);
   }
 });
 
+// Enterキーで次のinputに移動
 document.addEventListener("keydown", function(e) {
   if (e.key === "Enter" && e.target.tagName === "INPUT") {
     e.preventDefault();
-    var inputs = Array.from(document.querySelectorAll('input[type="number"], input[type="text"]')).filter(function(el) {
-      return el.offsetParent !== null && el.offsetWidth > 0 && el.offsetHeight > 0;
-    });
+    var inputs = getVisibleInputs();
     var idx = inputs.indexOf(e.target);
     if (idx >= 0 && idx < inputs.length - 1) {
       inputs[idx + 1].focus();
@@ -2257,7 +2285,117 @@ document.addEventListener("keydown", function(e) {
   }
 });
 
+// ===== 元に戻す（Undo）機能 =====
+
+var undoStack = [];
+var UNDO_MAX = 50;
+
+function pushUndo(entry) {
+  undoStack.push(entry);
+  if (undoStack.length > UNDO_MAX) undoStack.shift();
+  document.getElementById("btnUndo").disabled = false;
+}
+
+function updateUndoBtn() {
+  document.getElementById("btnUndo").disabled = (undoStack.length === 0);
+}
+
+// 日常水質のinputにundo記録を追加
+function attachUndoToWaterInputs() {
+  document.querySelectorAll("[data-field]").forEach(function(el) {
+    if (el._undoAttached) return;
+    el._undoAttached = true;
+    var prevVal = el.value;
+    el.addEventListener("focus", function() { prevVal = el.value; });
+    el.addEventListener("change", function() {
+      if (el.value !== prevVal) {
+        pushUndo({ sheet: "water", week: currentWeek, day: currentDay, field: el.dataset.field, oldValue: prevVal, newValue: el.value });
+        prevVal = el.value;
+      }
+    });
+  });
+}
+
+// テーブル系inputにundo記録を追加（equip/elec/mech）
+function attachUndoToTableInputs() {
+  // 機器運転時間
+  document.querySelectorAll("[data-equip]").forEach(function(el) {
+    if (el._undoAttached) return;
+    el._undoAttached = true;
+    var prevVal = el.value;
+    el.addEventListener("focus", function() { prevVal = el.value; });
+    el.addEventListener("change", function() {
+      if (el.value !== prevVal) {
+        pushUndo({ sheet: "equip", week: currentWeek, equipKey: el.dataset.equip, day: el.dataset.eday, oldValue: prevVal, newValue: el.value });
+        prevVal = el.value;
+      }
+    });
+  });
+  // 電気設備（input）
+  document.querySelectorAll("#elecTable input[data-elec]").forEach(function(el) {
+    if (el._undoAttached) return;
+    el._undoAttached = true;
+    var prevVal = el.value;
+    el.addEventListener("focus", function() { prevVal = el.value; });
+    el.addEventListener("change", function() {
+      if (el.value !== prevVal) {
+        pushUndo({ sheet: "elec", week: currentWeek, day: el.dataset.eday, field: el.dataset.elec, oldValue: prevVal, newValue: el.value });
+        prevVal = el.value;
+      }
+    });
+  });
+  // 機械設備（input）
+  document.querySelectorAll("#mechTable input[data-mech]").forEach(function(el) {
+    if (el._undoAttached) return;
+    el._undoAttached = true;
+    var prevVal = el.value;
+    el.addEventListener("focus", function() { prevVal = el.value; });
+    el.addEventListener("change", function() {
+      if (el.value !== prevVal) {
+        pushUndo({ sheet: "mech", week: currentWeek, day: el.dataset.mday, field: el.dataset.mech, oldValue: prevVal, newValue: el.value });
+        prevVal = el.value;
+      }
+    });
+  });
+}
+
+// Undoボタン
+document.getElementById("btnUndo").addEventListener("click", function() {
+  if (undoStack.length === 0) return;
+  var entry = undoStack.pop();
+  var val = entry.oldValue === "" ? null : (isNaN(Number(entry.oldValue)) ? entry.oldValue : Number(entry.oldValue));
+
+  if (entry.sheet === "water") {
+    weeklyData.weeks[entry.week][entry.day][entry.field] = val;
+    if (currentSheet === "water" && currentWeek == entry.week && currentDay === entry.day) {
+      loadDataToForm();
+    }
+  } else if (entry.sheet === "equip") {
+    weeklyData.equipment[entry.week][entry.equipKey][entry.day] = val;
+    if (currentSheet === "equip" && currentWeek == entry.week) {
+      loadEquipDataToForm();
+    }
+  } else if (entry.sheet === "elec") {
+    weeklyData.electrical[entry.week][entry.day][entry.field] = val;
+    if (currentSheet === "elec" && currentWeek == entry.week) {
+      loadElecDataToForm();
+    }
+  } else if (entry.sheet === "mech") {
+    weeklyData.mechanical[entry.week][entry.day][entry.field] = val;
+    if (currentSheet === "mech" && currentWeek == entry.week) {
+      loadMechDataToForm();
+    }
+  }
+  updateUndoBtn();
+  showToast("1つ戻しました");
+});
+
 init();
+
+// 初期化後にtabindex設定とundo attach
+updateTabIndexes();
+attachUndoToWaterInputs();
+attachUndoToTableInputs();
 </script>
 
 <script>
