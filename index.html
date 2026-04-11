@@ -2032,12 +2032,29 @@ function bindEvents() {
 
   // 全クリア（現在の日のみ）
   document.getElementById("btnClear").addEventListener("click", () => {
-    const label = "第" + currentWeek + "週 " + DAY_LABELS[currentDay];
-    if (!confirm(label + " のデータをすべてクリアしますか？")) return;
-    weeklyData.weeks[currentWeek][currentDay] = emptyDay();
-    loadDataToForm();
-    updateDayTabs();
-    showToast(label + " をクリアしました");
+    if (currentSheet === "water") {
+      const label = "第" + currentWeek + "週 " + DAY_LABELS[currentDay] + " の日常水質";
+      if (!confirm(label + " データをクリアしますか？")) return;
+      weeklyData.weeks[currentWeek][currentDay] = emptyDay();
+      loadDataToForm();
+      updateDayTabs();
+      showToast(label + " をクリアしました");
+    } else if (currentSheet === "equip") {
+      if (!confirm("第" + currentWeek + "週の機器運転時間データをクリアしますか？")) return;
+      weeklyData.equipment[currentWeek] = emptyEquipWeek();
+      loadEquipDataToForm();
+      showToast("第" + currentWeek + "週の機器運転時間をクリアしました");
+    } else if (currentSheet === "elec") {
+      if (!confirm("第" + currentWeek + "週の電気設備データをクリアしますか？")) return;
+      weeklyData.electrical[currentWeek] = emptyElecWeek();
+      loadElecDataToForm();
+      showToast("第" + currentWeek + "週の電気設備をクリアしました");
+    } else if (currentSheet === "mech") {
+      if (!confirm("第" + currentWeek + "週の機械設備データをクリアしますか？")) return;
+      weeklyData.mechanical[currentWeek] = emptyMechWeek();
+      loadMechDataToForm();
+      showToast("第" + currentWeek + "週の機械設備をクリアしました");
+    }
   });
 
   // 保存ボタン
@@ -2187,15 +2204,18 @@ document.addEventListener("keydown", (e) => {
   const el = e.target;
   if (!el || el.tagName !== "INPUT") return;
   e.preventDefault();
-  // 同じコンテナ内の全inputを取得して次に移動
-  const container = el.closest(".form-wrap, .equip-wrap");
-  if (!container) { el.blur(); return; }
-  const inputs = Array.from(container.querySelectorAll('input[type="number"], input[type="text"]'));
-  const idx = inputs.indexOf(el);
-  if (idx >= 0 && idx < inputs.length - 1) {
-    inputs[idx + 1].focus();
+  // 画面内の表示中(visible)のinputを全て取得してDOM順で次に移動
+  const allInputs = Array.from(document.querySelectorAll('input[type="number"], input[type="text"]'));
+  const visibleInputs = allInputs.filter(inp => {
+    if (inp.offsetParent === null) return false; // display:none等
+    const rect = inp.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  });
+  const idx = visibleInputs.indexOf(el);
+  if (idx >= 0 && idx < visibleInputs.length - 1) {
+    visibleInputs[idx + 1].focus();
   } else {
-    el.blur(); // 最後のinputならキーボードを閉じる
+    el.blur();
   }
 });
 
