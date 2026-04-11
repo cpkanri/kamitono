@@ -2250,12 +2250,79 @@ function getVisibleInputs() {
   });
 }
 
-// tabindexを連番で設定（iOS ∧∨ボタン用）
-function updateTabIndexes() {
-  var inputs = getVisibleInputs();
-  for (var i = 0; i < inputs.length; i++) {
-    inputs[i].setAttribute("tabindex", i + 1);
+// テーブル内の次のinputを列方向（縦）で探す
+function getNextTableInput(el) {
+  var table = el.closest("table.equip-table");
+  if (!table) return null;
+  var td = el.closest("td");
+  var tr = el.closest("tr");
+  if (!td || !tr) return null;
+  var colIdx = td.cellIndex;
+  var tbody = table.querySelector("tbody") || table;
+  var rows = Array.from(tbody.querySelectorAll("tr"));
+  var rowIdx = rows.indexOf(tr);
+
+  // 同じ列の次の行を探す
+  for (var r = rowIdx + 1; r < rows.length; r++) {
+    var cells = rows[r].querySelectorAll("td");
+    if (colIdx < cells.length) {
+      var inp = cells[colIdx].querySelector('input[type="number"], input[type="text"]');
+      if (inp && inp.offsetParent !== null) return inp;
+    }
   }
+  // 次の列の最初の行を探す
+  for (var c = colIdx + 1; c < 10; c++) {
+    for (var r2 = 0; r2 < rows.length; r2++) {
+      var cells2 = rows[r2].querySelectorAll("td");
+      if (c < cells2.length) {
+        var inp2 = cells2[c].querySelector('input[type="number"], input[type="text"]');
+        if (inp2 && inp2.offsetParent !== null) return inp2;
+      }
+    }
+  }
+  return null; // テーブル内に次がない
+}
+
+// 次のinputを取得（テーブル内なら縦方向、それ以外はDOM順）
+function getNextInput(el) {
+  if (el.closest("table.equip-table")) {
+    var next = getNextTableInput(el);
+    if (next) return next;
+    return null;
+  }
+  // 日常水質など: DOM順で次のvisible input
+  var inputs = getVisibleInputs();
+  var idx = inputs.indexOf(el);
+  if (idx >= 0 && idx < inputs.length - 1) return inputs[idx + 1];
+  return null;
+}
+
+// tabindexを連番で設定（iOS ∧∨ボタン用）— テーブルは列方向順
+function updateTabIndexes() {
+  var tabIdx = 1;
+  // 日常水質のinput（DOM順）
+  document.querySelectorAll('.form-wrap input[type="number"], .form-wrap input[type="text"]').forEach(function(el) {
+    if (el.offsetParent !== null) el.setAttribute("tabindex", tabIdx++);
+  });
+  // テーブル系は列方向順でtabindex設定
+  ["equipTable", "elecTable", "mechTable"].forEach(function(tableId) {
+    var table = document.getElementById(tableId);
+    if (!table || table.offsetParent === null) return;
+    var tbody = table.querySelector("tbody") || table;
+    var rows = Array.from(tbody.querySelectorAll("tr"));
+    if (rows.length === 0) return;
+    var maxCols = 0;
+    rows.forEach(function(r) { var c = r.querySelectorAll("td").length; if (c > maxCols) maxCols = c; });
+    for (var c = 1; c < maxCols; c++) { // skip col 0 (label)
+      for (var r = 0; r < rows.length; r++) {
+        var cells = rows[r].querySelectorAll("td");
+        if (c < cells.length) {
+          var inp = cells[c].querySelector('input[type="number"], input[type="text"]');
+          if (inp && inp.offsetParent !== null) inp.setAttribute("tabindex", tabIdx++);
+        }
+      }
+    }
+  });
 }
 
 // inputタップ時に全選択＋スクロール＋記録
@@ -2287,25 +2354,23 @@ document.addEventListener("focusout", function(e) {
     if (active && (active.tagName === "BUTTON" || active.tagName === "SELECT")) {
       return;
     }
-    // 次のvisibleなinputにフォーカス
-    var inputs = getVisibleInputs();
-    var idx = inputs.indexOf(blurredInput);
-    if (idx >= 0 && idx < inputs.length - 1) {
-      inputs[idx + 1].focus();
-      inputs[idx + 1].select();
+    // 次のinputにフォーカス（テーブルなら縦方向）
+    var next = getNextInput(blurredInput);
+    if (next) {
+      next.focus();
+      next.select();
     }
   }, 300);
 });
 
-// PCのEnterキーで次のinputに移動
+// PCのEnterキーで次のinputに移動（テーブルなら縦方向）
 document.addEventListener("keydown", function(e) {
   if (e.key === "Enter" && e.target.tagName === "INPUT") {
     e.preventDefault();
-    var inputs = getVisibleInputs();
-    var idx = inputs.indexOf(e.target);
-    if (idx >= 0 && idx < inputs.length - 1) {
-      inputs[idx + 1].focus();
-      inputs[idx + 1].select();
+    var next = getNextInput(e.target);
+    if (next) {
+      next.focus();
+      next.select();
     } else {
       e.target.blur();
     }
