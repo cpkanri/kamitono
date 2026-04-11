@@ -2250,19 +2250,21 @@ function getVisibleInputs() {
   });
 }
 
-// tabindexとenterkeyhintを連番で設定
+// tabindexを連番で設定（iOS ∧∨ボタン用）
 function updateTabIndexes() {
   var inputs = getVisibleInputs();
   for (var i = 0; i < inputs.length; i++) {
     inputs[i].setAttribute("tabindex", i + 1);
-    inputs[i].setAttribute("enterkeyhint", (i < inputs.length - 1) ? "next" : "done");
   }
 }
 
-// inputタップ時に全選択＋スクロール
+// inputタップ時に全選択＋スクロール＋記録
+var lastFocusedInput = null;
+
 document.addEventListener("focusin", function(e) {
   var el = e.target;
   if (el.tagName === "INPUT" && (el.type === "number" || el.type === "text")) {
+    lastFocusedInput = el;
     setTimeout(function() { el.select(); }, 50);
     setTimeout(function() {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -2270,7 +2272,32 @@ document.addEventListener("focusin", function(e) {
   }
 });
 
-// Enterキーで次のinputに移動
+// iOS自動次移動: blur後300msで別inputにフォーカスが移っていなければ次へ
+document.addEventListener("focusout", function(e) {
+  if (e.target.tagName !== "INPUT") return;
+  if (e.target.type !== "number" && e.target.type !== "text") return;
+  var blurredInput = e.target;
+  setTimeout(function() {
+    var active = document.activeElement;
+    // 別のinputに既にフォーカスが移っている → 何もしない
+    if (active && active.tagName === "INPUT" && (active.type === "number" || active.type === "text")) {
+      return;
+    }
+    // ボタンやselectをタップした場合も移動しない
+    if (active && (active.tagName === "BUTTON" || active.tagName === "SELECT")) {
+      return;
+    }
+    // 次のvisibleなinputにフォーカス
+    var inputs = getVisibleInputs();
+    var idx = inputs.indexOf(blurredInput);
+    if (idx >= 0 && idx < inputs.length - 1) {
+      inputs[idx + 1].focus();
+      inputs[idx + 1].select();
+    }
+  }, 300);
+});
+
+// PCのEnterキーで次のinputに移動
 document.addEventListener("keydown", function(e) {
   if (e.key === "Enter" && e.target.tagName === "INPUT") {
     e.preventDefault();
