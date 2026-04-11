@@ -1918,95 +1918,80 @@ function bindEvents() {
 
   // 前日コピー
   document.getElementById("btnCopy").addEventListener("click", () => {
-    if (currentSheet === "water") {
-      // 日常水質: 既存の動作（水質データのみコピー）
-      saveFormToData();
-      const order = ["mon", "tue", "wed", "thu", "nextMon"];
-      const idx = order.indexOf(currentDay);
-      let src = null;
-      let srcLabel = "";
+    // 前日を特定する共通ヘルパー（曜日配列とcurrentDayからソース週・日を返す）
+    function findPrevDay(daysArr) {
+      // currentDayをdaysArr内のキーにマッピング（nextMon→friなど水質特有のキーを変換）
+      const dayKey = (currentDay === "nextMon" && daysArr.indexOf("nextMon") < 0) ? "fri" : currentDay;
+      const idx = daysArr.indexOf(dayKey);
+      if (idx < 0) return null; // 現在の曜日がこのタブに存在しない
       if (idx > 0) {
-        src = weeklyData.weeks[currentWeek][order[idx - 1]];
-        srcLabel = DAY_LABELS[order[idx - 1]] + "曜日";
-      } else if (currentWeek > 1) {
-        src = weeklyData.weeks[currentWeek - 1].thu;
-        srcLabel = "第" + (currentWeek - 1) + "週の木曜";
-      } else {
-        showToast("コピー元の前日がありません", "error");
-        return;
+        return { week: currentWeek, day: daysArr[idx - 1], label: DAY_LABELS[daysArr[idx - 1]] || daysArr[idx - 1] };
       }
+      // 先頭（月曜） → 前週の最後の曜日
+      if (currentWeek > 1) {
+        const lastDay = daysArr[daysArr.length - 1];
+        return { week: currentWeek - 1, day: lastDay, label: "第" + (currentWeek - 1) + "週" + (DAY_LABELS[lastDay] || lastDay) };
+      }
+      return null; // コピー元なし
+    }
+
+    if (currentSheet === "water") {
+      // 日常水質: 水質データのみコピー（積算値除外）
+      saveFormToData();
+      const prev = findPrevDay(["mon", "tue", "wed", "thu", "nextMon"]);
+      if (!prev) { showToast("コピー元の前日がありません", "error"); return; }
+      const src = weeklyData.weeks[prev.week][prev.day];
       const dst = weeklyData.weeks[currentWeek][currentDay];
       COPY_FIELDS.forEach(k => { dst[k] = src[k]; });
       loadDataToForm();
       updateDayTabs();
-      showToast(srcLabel + "からコピーしました");
+      showToast(prev.label + "からコピーしました");
 
     } else if (currentSheet === "equip") {
-      // 機器運転時間: 各日を前日からコピー（月←前週金）
+      // 機器運転時間: currentDayの列だけにコピー
       saveEquipFormToData();
-      const days = EQUIP_DAYS; // ["mon","tue","wed","thu","fri"]
-      for (let i = 0; i < days.length; i++) {
-        let srcWeek, srcDay;
-        if (i === 0) {
-          if (currentWeek > 1) { srcWeek = currentWeek - 1; srcDay = "fri"; }
-          else continue;
-        } else {
-          srcWeek = currentWeek; srcDay = days[i - 1];
-        }
-        EQUIP_KEYS.forEach(k => {
-          weeklyData.equipment[currentWeek][k][days[i]] = weeklyData.equipment[srcWeek][k][srcDay];
-        });
-      }
+      const dayKey = (currentDay === "nextMon") ? "fri" : currentDay;
+      const prev = findPrevDay(EQUIP_DAYS);
+      if (!prev) { showToast("コピー元の前日がありません", "error"); return; }
+      EQUIP_KEYS.forEach(k => {
+        weeklyData.equipment[currentWeek][k][dayKey] = weeklyData.equipment[prev.week][k][prev.day];
+      });
       loadEquipDataToForm();
-      // コピー済み色付け
-      document.querySelectorAll("#equipTable [data-equip]").forEach(el => {
+      // コピー先列だけ色付け
+      document.querySelectorAll('#equipTable [data-eday="' + dayKey + '"]').forEach(el => {
         el.classList.add("copied");
       });
-      showToast("前日データをコピーしました");
+      showToast(prev.label + "から" + (DAY_LABELS[dayKey] || dayKey) + "にコピーしました");
 
     } else if (currentSheet === "elec") {
-      // 電気設備: 各日を前日からコピー
+      // 電気設備: currentDayの列だけにコピー
       saveElecFormToData();
-      const days = EQUIP_DAYS;
-      for (let i = 0; i < days.length; i++) {
-        let srcWeek, srcDay;
-        if (i === 0) {
-          if (currentWeek > 1) { srcWeek = currentWeek - 1; srcDay = "fri"; }
-          else continue;
-        } else {
-          srcWeek = currentWeek; srcDay = days[i - 1];
-        }
-        const srcData = weeklyData.electrical[srcWeek][srcDay];
-        const dstData = weeklyData.electrical[currentWeek][days[i]];
-        ALL_ELEC_KEYS.forEach(k => { dstData[k] = srcData[k]; });
-      }
+      const dayKey = (currentDay === "nextMon") ? "fri" : currentDay;
+      const prev = findPrevDay(EQUIP_DAYS);
+      if (!prev) { showToast("コピー元の前日がありません", "error"); return; }
+      const srcData = weeklyData.electrical[prev.week][prev.day];
+      const dstData = weeklyData.electrical[currentWeek][dayKey];
+      ALL_ELEC_KEYS.forEach(k => { dstData[k] = srcData[k]; });
       loadElecDataToForm();
-      document.querySelectorAll("#elecTable [data-elec]").forEach(el => {
+      document.querySelectorAll('#elecTable [data-eday="' + dayKey + '"]').forEach(el => {
         el.classList.add("copied");
       });
-      showToast("前日データをコピーしました");
+      showToast(prev.label + "から" + (DAY_LABELS[dayKey] || dayKey) + "にコピーしました");
 
     } else if (currentSheet === "mech") {
-      // 機械設備: 各日を前日からコピー
+      // 機械設備: currentDayの列だけにコピー
       saveMechFormToData();
-      const days = MECH_DAYS;
-      for (let i = 0; i < days.length; i++) {
-        let srcWeek, srcDay;
-        if (i === 0) {
-          if (currentWeek > 1) { srcWeek = currentWeek - 1; srcDay = days[days.length - 1]; }
-          else continue;
-        } else {
-          srcWeek = currentWeek; srcDay = days[i - 1];
-        }
-        const srcData = weeklyData.mechanical[srcWeek][srcDay];
-        const dstData = weeklyData.mechanical[currentWeek][days[i]];
-        ALL_MECH_KEYS.forEach(k => { dstData[k] = srcData[k]; });
-      }
+      const dayKey = (currentDay === "nextMon") ? "fri" : currentDay;
+      const prev = findPrevDay(MECH_DAYS);
+      if (!prev) { showToast("コピー元の前日がありません", "error"); return; }
+      const srcData = weeklyData.mechanical[prev.week][prev.day];
+      const dstData = weeklyData.mechanical[currentWeek][dayKey];
+      ALL_MECH_KEYS.forEach(k => { dstData[k] = srcData[k]; });
       loadMechDataToForm();
-      document.querySelectorAll("#mechTable [data-mech]").forEach(el => {
+      document.querySelectorAll('#mechTable [data-mday="' + dayKey + '"]').forEach(el => {
         el.classList.add("copied");
       });
-      showToast("前日データをコピーしました");
+      showToast(prev.label + "から" + (DAY_LABELS[dayKey] || dayKey) + "にコピーしました");
     }
   });
 
