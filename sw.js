@@ -1,5 +1,5 @@
-const CACHE_NAME = 'kamitono-weekly-v1';
-const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
+const CACHE_NAME = 'kamitono-weekly-v2';
+const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './template.js'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)));

@@ -1230,6 +1230,46 @@ function computeDate(weekIdx, dayKey) {
   return (d.getMonth() + 1) + "/" + d.getDate();
 }
 
+// 週番号と曜日キーから実際のDateオブジェクトを返す
+function getActualDate(weekIdx, dayKey) {
+  if (!weeklyData.startDate) return null;
+  var base = new Date(weeklyData.startDate + "T00:00:00");
+  if (isNaN(base.getTime())) return null;
+  var dayOffsetMap = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, nextMon: 4 };
+  var offsetDays = (weekIdx - 1) * 7 + (dayOffsetMap[dayKey] || 0);
+  var d = new Date(base);
+  d.setDate(base.getDate() + offsetDays);
+  return d;
+}
+
+function getMonthStr(date) {
+  if (!date) return "";
+  return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0");
+}
+
+// 日付→データのマップを構築（全週全日を走査）
+function buildDateMap() {
+  var map = {};
+  for (var w = 1; w <= 5; w++) {
+    var weekData = weeklyData.weeks[w];
+    if (!weekData) continue;
+    var dayKeys = ["mon", "tue", "wed", "thu", "nextMon"];
+    for (var di = 0; di < dayKeys.length; di++) {
+      var dayKey = dayKeys[di];
+      var dateObj = getActualDate(w, dayKey);
+      if (!dateObj) continue;
+      var y = dateObj.getFullYear();
+      var m = String(dateObj.getMonth() + 1).padStart(2, "0");
+      var d = String(dateObj.getDate()).padStart(2, "0");
+      var key = y + "-" + m + "-" + d;
+      if (weekData[dayKey]) {
+        map[key] = weekData[dayKey];
+      }
+    }
+  }
+  return map;
+}
+
 function isDayFilled(weekIdx, dayKey) {
   const day = weeklyData.weeks[weekIdx] && weeklyData.weeks[weekIdx][dayKey];
   if (!day) return false;
@@ -2186,30 +2226,7 @@ function bindEvents() {
   });
 
   // Excel出力ボタン
-  document.getElementById("btnExcel").addEventListener("click", async () => {
-    const btnExcel = document.getElementById("btnExcel");
-    btnExcel.textContent = "生成中...";
-    btnExcel.disabled = true;
-
-    try {
-      const month = weeklyData.targetMonth || document.getElementById("targetMonth").value;
-      const url = GAS_URL + '?action=exportExcel&month=' + encodeURIComponent(month);
-      const res = await fetch(url, { redirect: 'follow' });
-      const data = await res.json();
-
-      if (data.status === 'ok' && data.downloadUrl) {
-        window.open(data.downloadUrl, '_blank');
-        showToast("Excelファイルを生成しました。ダウンロードが開始されます。");
-      } else {
-        showToast("Excel生成に失敗しました: " + (data.message || "不明なエラー"), "error");
-      }
-    } catch (e) {
-      showToast("Excel生成に失敗しました: " + e.message, "error");
-    } finally {
-      btnExcel.textContent = "📄 Excel出力（日常水質）";
-      btnExcel.disabled = false;
-    }
-  });
+  document.getElementById("btnExcel").addEventListener("click", exportExcel);
 }
 
 // ===== 初期化 =====
@@ -2491,9 +2508,224 @@ attachUndoToWaterInputs();
 attachUndoToTableInputs();
 </script>
 
+<script src="./template.js"></script>
 <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js');
+}
+
+// ===== Excel出力機能（クライアントサイド） =====
+
+function loadScript(src) {
+  return new Promise(function(resolve, reject) {
+    if (document.querySelector('script[src="' + src + '"]')) { resolve(); return; }
+    var s = document.createElement("script");
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = function() { reject(new Error("スクリプト読み込み失敗: " + src)); };
+    document.head.appendChild(s);
+  });
+}
+
+function setCell(ws, row, col, val) {
+  if (val === null || val === undefined || val === "") return;
+  var cell = ws.getCell(row, col);
+  var num = Number(val);
+  if (!isNaN(num) && val !== "" && typeof val !== "boolean") {
+    cell.value = num;
+  } else {
+    cell.value = val;
+  }
+}
+
+async function exportExcel() {
+  var btnExcel = document.getElementById("btnExcel");
+  btnExcel.textContent = "生成中...";
+  btnExcel.disabled = true;
+
+  try {
+    if (typeof ExcelJS === "undefined") {
+      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js");
+    }
+
+    if (typeof EXCEL_TEMPLATE_B64 === "undefined") {
+      throw new Error("テンプレートが読み込まれていません");
+    }
+
+    var templateBytes = Uint8Array.from(atob(EXCEL_TEMPLATE_B64), function(c) { return c.charCodeAt(0); });
+    var wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(templateBytes.buffer);
+
+    var ym = weeklyData.targetMonth || document.getElementById("targetMonth").value;
+    var parts = ym.split("-").map(Number);
+    var yyyy = parts[0];
+    var mm = parts[1];
+    var reiwa = yyyy - 2018;
+    var reiwaYear = "令和" + reiwa + "年度";
+    var monthLabel = "令和" + reiwa + "年" + mm + "月分";
+
+    // シート1: 日常水質
+    fillWaterSheet(wb, yyyy, mm, reiwaYear, monthLabel);
+
+    // シート2: 機器運転時間
+    fillEquipSheet(wb, yyyy, mm);
+
+    // ダウンロード
+    var buf = await wb.xlsx.writeBuffer();
+    var blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "上殿浄化センター記録表_" + ym + ".xlsx";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast("Excelファイルをダウンロードしました");
+
+  } catch (e) {
+    console.error("Excel出力エラー:", e);
+    showToast("Excel出力に失敗: " + e.message, "error");
+  } finally {
+    btnExcel.textContent = "📄 Excel出力（日常水質）";
+    btnExcel.disabled = false;
+  }
+}
+
+// ===== 日常水質シート =====
+function fillWaterSheet(wb, yyyy, mm, reiwaYear, monthLabel) {
+  var ws = wb.getWorksheet(1);
+  if (!ws) return;
+
+  // 累積値列マップ: mon=I(9), tue=J(10), wed=K(11), thu=L(12), nextMon=N(14)
+  var dayColMap = { mon: 9, tue: 10, wed: 11, thu: 12, nextMon: 14 };
+  // 水質データ列マップ: mon=J(10), tue=K(11), wed=L(12), thu=M(13), nextMon=N(14)
+  var dayColMapWQ = { mon: 10, tue: 11, wed: 12, thu: 13, nextMon: 14 };
+
+  // 週ブロックオフセット（各週44行）
+  var weekOffsets = { 1: 0, 2: 44, 3: 88, 4: 132, 5: 176 };
+
+  for (var w = 1; w <= 5; w++) {
+    var offset = weekOffsets[w];
+    var weekData = weeklyData.weeks[w];
+    if (!weekData) continue;
+
+    // 年度表示
+    setCell(ws, 1 + offset, 14, reiwaYear);
+
+    // 日付行
+    var startDateObj = getActualDate(w, "mon");
+    if (startDateObj) {
+      setCell(ws, 3 + offset, 9, startDateObj.getDate());
+    }
+    var friDateObj = getActualDate(w, "nextMon");
+    if (friDateObj) {
+      setCell(ws, 3 + offset, 14, friDateObj.getDate());
+    }
+
+    var dayKeys = ["mon", "tue", "wed", "thu", "nextMon"];
+    for (var di = 0; di < dayKeys.length; di++) {
+      var dayKey = dayKeys[di];
+      var dayData = weekData[dayKey];
+      if (!dayData) continue;
+
+      // 累積読み値（Row4-10）
+      var cumCol = dayColMap[dayKey];
+      setCell(ws, 4 + offset, cumCol, dayData.power200v);
+      setCell(ws, 5 + offset, cumCol, dayData.power100v);
+      setCell(ws, 6 + offset, cumCol, dayData.water);
+      setCell(ws, 7 + offset, cumCol, dayData.diesel);
+      setCell(ws, 8 + offset, cumCol, dayData.returnSludge);
+      setCell(ws, 9 + offset, cumCol, dayData.excessSludge);
+      setCell(ws, 10 + offset, cumCol, dayData.discharge);
+
+      // 水質データ（Row13以降）
+      var wqCol = dayColMapWQ[dayKey];
+
+      // 水温
+      setCell(ws, 14 + offset, wqCol, dayData.tempIn);
+      setCell(ws, 15 + offset, wqCol, dayData.tempDitch);
+      setCell(ws, 16 + offset, wqCol, dayData.tempOut);
+
+      // 透視度
+      setCell(ws, 17 + offset, wqCol, dayData.transIn);
+      setCell(ws, 18 + offset, wqCol, dayData.transOut);
+
+      // pH
+      setCell(ws, 19 + offset, wqCol, dayData.phIn);
+      setCell(ws, 20 + offset, wqCol, dayData.phDitch);
+      setCell(ws, 21 + offset, wqCol, dayData.phOut);
+
+      // SV
+      setCell(ws, 22 + offset, wqCol, dayData.sv10);
+      setCell(ws, 23 + offset, wqCol, dayData.sv20);
+      setCell(ws, 24 + offset, wqCol, dayData.sv30);
+      setCell(ws, 25 + offset, wqCol, dayData.sv24h);
+
+      // MLSS, 汚泥界面, 残留塩素
+      setCell(ws, 26 + offset, wqCol, dayData.mlss);
+      setCell(ws, 27 + offset, wqCol, dayData.sludgeLevel);
+      setCell(ws, 28 + offset, wqCol, dayData.chlorine);
+
+      // 点検者
+      setCell(ws, 12 + offset, wqCol, dayData.inspector);
+    }
+  }
+}
+
+// ===== 機器運転時間シート =====
+function fillEquipSheet(wb, yyyy, mm) {
+  var ws = wb.getWorksheet(2);
+  if (!ws) return;
+
+  var equipRowMap = {
+    screenUnit: 7,
+    mainPump1: 8,
+    mainPump2: 9,
+    sludgePump1: 10,
+    sludgePump2: 11,
+    aeration1: 12,
+    aeration2: 13,
+    aeration3: 14,
+    finalScraper: 15,
+    returnPump1: 16,
+    returnPump2: 17,
+    thickPump: 18,
+    thickScraper: 19,
+    sludgeMixer: 20
+  };
+
+  var dayColEquip = { mon: 4, tue: 5, wed: 6, thu: 7, fri: 8 };
+
+  // 各週のデータを出力（5週分を5ブロックで）
+  var weekRowOffsets = { 1: 0, 2: 20, 3: 40, 4: 60, 5: 80 };
+
+  for (var w = 1; w <= 5; w++) {
+    var equipData = weeklyData.equipment[w];
+    if (!equipData) continue;
+    var offset = weekRowOffsets[w] || 0;
+
+    // 日付表示
+    var monDate = getActualDate(w, "mon");
+    var friDate = getActualDate(w, "nextMon");
+    if (monDate) {
+      var reiwa = monDate.getFullYear() - 2018;
+      setCell(ws, 3 + offset, 4, "R" + reiwa + "." + (monDate.getMonth()+1) + "." + monDate.getDate());
+    }
+    if (friDate) {
+      setCell(ws, 3 + offset, 8, "R" + (friDate.getFullYear()-2018) + "." + (friDate.getMonth()+1) + "." + friDate.getDate());
+    }
+
+    for (var equipKey in equipRowMap) {
+      if (!equipData[equipKey]) continue;
+      var row = equipRowMap[equipKey] + offset;
+      for (var dayKey in dayColEquip) {
+        var col = dayColEquip[dayKey];
+        var val = equipData[equipKey][dayKey];
+        setCell(ws, row, col, val);
+      }
+    }
+  }
 }
 </script>
 </body>
