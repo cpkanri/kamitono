@@ -2226,7 +2226,7 @@ function bindEvents() {
   });
 
   // Excel出力ボタン
-  document.getElementById("btnExcel").addEventListener("click", exportExcel);
+  document.getElementById("btnExcel").addEventListener("click", function() { if (typeof exportExcel === "function") { exportExcel(); } else { showToast("Excel出力機能を読み込み中です。もう一度お試しください。", "warn"); } });
 }
 
 // ===== 初期化 =====
