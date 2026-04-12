@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kamitono-weekly-v4';
+const CACHE_NAME = 'kamitono-weekly-v5';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './template.js'];
 
 self.addEventListener('install', event => {
