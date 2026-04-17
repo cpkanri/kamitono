@@ -1,14 +1,26 @@
 {
   "name": "上殿浄化センター 週報入力",
   "short_name": "上殿週報",
-  "description": "上殿浄化センター 週報入力アプリ",
-  "start_url": "./index.html",
+  "description": "上殿浄化センターの日常水質・機器運転時間・電気設備・機械設備の週報入力アプリ",
+  "start_url": "/kamitono/",
+  "scope": "/kamitono/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#f0f2f5",
   "theme_color": "#0d4f34",
-  "orientation": "portrait",
+  "lang": "ja",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }
