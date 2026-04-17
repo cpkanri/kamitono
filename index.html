@@ -1736,7 +1736,7 @@ function updateDayTabs() {
 // ===== localStorage保存・読込 =====
 
 function saveToStorage() {
-  try {
+  function doSave() {
     if (currentSheet === "water") saveFormToData();
     else if (currentSheet === "equip") saveEquipFormToData();
     else if (currentSheet === "elec") saveElecFormToData();
@@ -1752,10 +1752,48 @@ function saveToStorage() {
     if (weeklyData.targetMonth) {
       localStorage.setItem("uedono_current_month", weeklyData.targetMonth);
     }
+  }
+  function isQuotaError(e) {
+    return !!e && (
+      e.name === 'QuotaExceededError' ||
+      e.code === 22 || e.code === 1014 ||
+      /quota/i.test(String(e.message || ''))
+    );
+  }
+  function cleanupOldKeys(keepMonth) {
+    const keepKey = 'uedono_weekly_' + (keepMonth || '');
+    const toRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('uedono_weekly_') && k !== keepKey) toRemove.push(k);
+    }
+    toRemove.forEach(k => localStorage.removeItem(k));
+    return toRemove.length;
+  }
+
+  try {
+    doSave();
     return true;
   } catch (e) {
+    if (isQuotaError(e)) {
+      // 他月の古いデータを削除して再試行
+      console.warn('localStorage quota exceeded — cleaning old month keys');
+      const cleared = cleanupOldKeys(weeklyData.targetMonth);
+      console.log('Cleared', cleared, 'old month keys');
+      try {
+        doSave();
+        if (typeof showToast === 'function') {
+          showToast("容量超過を検出 → 他月キャッシュ" + cleared + "件を削除して保存しました", "warn");
+        }
+        return true;
+      } catch (e2) {
+        console.error('saveToStorage retry failed:', e2);
+        window.__lastSaveError = e2;
+        return false;
+      }
+    }
     console.error('saveToStorage error:', e);
-    window.__lastSaveError = e; // デバッグ用に保持
+    window.__lastSaveError = e;
     return false;
   }
 }
