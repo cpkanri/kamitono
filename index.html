@@ -524,6 +524,40 @@ header h1 {
   0%, 100% { box-shadow: 0 2px 6px rgba(13,79,52,0.25); }
   50% { box-shadow: 0 2px 12px rgba(255,152,0,0.6); }
 }
+
+/* ===== MLDO計算ボタン ===== */
+.mldo-wrap {
+  padding: 0 14px 12px;
+}
+.btn-mldo {
+  width: 100%;
+  padding: 12px;
+  background: #546e7a;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+  min-height: 44px;
+}
+.btn-mldo:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.btn-mldo.pending {
+  background: #ff6f00;
+  animation: pulse-mldo 2s infinite;
+}
+.btn-mldo.done {
+  background: #2e7d32;
+}
+@keyframes pulse-mldo {
+  0%, 100% { box-shadow: 0 2px 6px rgba(255,111,0,0.3); }
+  50% { box-shadow: 0 4px 16px rgba(255,111,0,0.7); }
+}
 </style>
 </head>
 <body>
@@ -872,6 +906,10 @@ header h1 {
 
 <div class="excel-wrap">
   <button type="button" class="btn-excel" id="btnExcel">📄 Excel出力（日常水質）</button>
+</div>
+
+<div class="mldo-wrap">
+  <button type="button" class="btn-mldo" id="btnMldo">⚗ MLDO計算</button>
 </div>
 
 <div class="info-bar">データは端末に保存されます（localStorage）</div>
@@ -2235,7 +2273,7 @@ function bindEvents() {
     loadDataToForm();
     showToast("対象月を " + newMonth + " に変更しました");
     // バックグラウンドでサーバーからも取得
-    syncFromServer();
+    syncFromServer().then(() => updateMldoStatus());
   });
 
   // startDate は readonly（自動計算）のため change イベントは不要
@@ -2424,6 +2462,8 @@ function bindEvents() {
       setConnectionStatus(true);
       markClean();
       showToast("保存しました（サーバー同期完了）");
+      // 水温データが増えた可能性があるのでMLDOステータスを更新
+      updateMldoStatus();
     } catch (e) {
       setConnectionStatus(false);
       const msg = e && e.message ? e.message : String(e);
@@ -2500,6 +2540,62 @@ function bindEvents() {
       btnExcel.disabled = false;
     }
   });
+
+  // MLDO計算ボタン
+  document.getElementById("btnMldo").addEventListener("click", async () => {
+    const btn = document.getElementById("btnMldo");
+    if (!weeklyData.targetMonth) {
+      showToast("対象月が未設定です", "error");
+      return;
+    }
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = "計算中...";
+    try {
+      const url = GAS_URL + '?action=computeMldo&month=' + encodeURIComponent(weeklyData.targetMonth);
+      const res = await fetchWithTimeout(url, { method: 'GET' }, 30000);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      let msg = "MLDO計算完了：新規 " + (data.newlyComputed || 0) + " 件";
+      if (typeof data.writtenToReport === 'number') {
+        msg += "、水質管理報告に " + data.writtenToReport + " 件反映";
+      }
+      showToast(msg, "success");
+      await updateMldoStatus();
+    } catch (e) {
+      console.error('MLDO計算エラー:', e);
+      showToast("MLDO計算失敗: " + (e.message || e), "error");
+      btn.textContent = originalText;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+// ===== MLDO計算ステータス更新 =====
+async function updateMldoStatus() {
+  const btn = document.getElementById('btnMldo');
+  if (!btn || !weeklyData.targetMonth) return;
+  try {
+    const url = GAS_URL + '?action=checkMldo&month=' + encodeURIComponent(weeklyData.targetMonth);
+    const res = await fetchWithTimeout(url, { method: 'GET' }, 10000);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.error) return;
+    btn.classList.remove('pending', 'done');
+    if (data.needsCompute && data.pendingCount > 0) {
+      btn.textContent = '⚠ MLDO計算（' + data.pendingCount + '日分未実行）';
+      btn.classList.add('pending');
+    } else if (data.dataCount > 0) {
+      btn.textContent = '✓ MLDO計算（' + data.computedCount + '日分完了）';
+      btn.classList.add('done');
+    } else {
+      btn.textContent = '⚗ MLDO計算（データ待ち）';
+    }
+  } catch (e) {
+    // サーバー未接続時は触らない（既存表示を維持）
+  }
 }
 
 // ===== Excel 出力（クライアントサイド ExcelJS + template.js） =====
@@ -2793,7 +2889,7 @@ async function init() {
   loadDataToForm();
 
   // b. バックグラウンドでGASからデータ取得（接続確認を兼ねる）
-  syncFromServer();
+  syncFromServer().then(() => updateMldoStatus());
 }
 
 // ===== スマホUX改善 =====
