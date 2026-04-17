@@ -881,7 +881,7 @@ header h1 {
 
 <script>
 // ===== GAS URL =====
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzNAyPUWAAMaAH7h-bbCIesP-Yj_eqwNBkzh4H3Pd9UdliySG70WkOICAmHC-hs0-TG/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbx1byxE6wXgxzPgHWFN4VRsEkcf6fp6CsvUEhdLg1OEr12gjlJqLzfpS4hHJxR9ZpS2/exec';
 
 // ===== 定数定義 =====
 
@@ -1253,9 +1253,10 @@ function currentYearMonth() {
 function estimateStartDate(ym) {
   if (!ym) return "";
   const [y, m] = ym.split("-").map(Number);
-  const first = new Date(y, m - 1, 1);
-  const dow = first.getDay();
-  const offset = (dow === 1) ? 0 : (dow === 0 ? 1 : (8 - dow) % 7);
+  const first = new Date(y, m - 1, 1); // その月の1日
+  const dow = first.getDay(); // 0=日, 1=月, ..., 6=土
+  // 1日を含む週の月曜日を求める（1日が日曜なら-6、月曜なら0、火曜なら-1、...）
+  const offset = dow === 0 ? -6 : 1 - dow;
   const monday = new Date(y, m - 1, 1 + offset);
   const yy = monday.getFullYear();
   const mm = String(monday.getMonth() + 1).padStart(2, "0");
