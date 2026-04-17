@@ -1754,6 +1754,8 @@ function saveToStorage() {
     }
     return true;
   } catch (e) {
+    console.error('saveToStorage error:', e);
+    window.__lastSaveError = e; // デバッグ用に保持
     return false;
   }
 }
@@ -2350,7 +2352,9 @@ function bindEvents() {
     // a. まずlocalStorageに全データ保存
     const ok = saveToStorage();
     if (!ok) {
-      showToast("保存に失敗しました", "error");
+      const err = window.__lastSaveError;
+      const msg = err ? (err.name + ": " + (err.message || String(err))) : "不明なエラー";
+      showToast("保存に失敗しました — " + msg, "error");
       return;
     }
 
