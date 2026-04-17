@@ -1737,7 +1737,8 @@ function saveToStorage() {
     else if (currentSheet === "elec") saveElecFormToData();
     else if (currentSheet === "mech") saveMechFormToData();
     weeklyData.targetMonth = document.getElementById("targetMonth").value || weeklyData.targetMonth;
-    weeklyData.startDate = document.getElementById("startDate").value || weeklyData.startDate;
+    // startDate はinput値ではなく対象月から常に再計算（readonly のため）
+    weeklyData.startDate = estimateStartDate(weeklyData.targetMonth);
     localStorage.setItem(storageKey(), JSON.stringify(weeklyData));
     const inspEl = document.querySelector('[data-field="inspector"]');
     if (inspEl && inspEl.value) {
@@ -1954,7 +1955,9 @@ function mergeServerData(serverData) {
     merged = true;
   }
 
-  if (serverData.startDate) weeklyData.startDate = serverData.startDate;
+  // startDate はクライアント側で対象月から常に自動計算するため、サーバー値で上書きしない
+  // （過去に誤った startDate が保存されていても、クライアント側で正しい値に維持する）
+  weeklyData.startDate = estimateStartDate(weeklyData.targetMonth);
   ensureWeeklyStructure();
   localStorage.setItem(storageKey(), JSON.stringify(weeklyData));
   return merged;
@@ -1984,6 +1987,8 @@ async function syncFromServer() {
 
     if (data && (data.weeks || data.water || data.equipment || data.electrical || data.mechanical)) {
       mergeServerData(data);
+      // startDate を強制再計算（mergeServerData 内でも再計算するが二重保険）
+      weeklyData.startDate = estimateStartDate(weeklyData.targetMonth);
       // UI更新
       document.getElementById("startDate").value = weeklyData.startDate || "";
       updateDayTabs();
