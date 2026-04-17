@@ -1858,14 +1858,23 @@ async function saveCurrentToServer() {
     };
   }
   console.log('送信データ:', JSON.stringify(payload).substring(0, 500));
-  const res = await fetchWithTimeout(GAS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify(payload)
-  }, 15000);
+  let res;
+  try {
+    res = await fetchWithTimeout(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload)
+    }, 15000);
+  } catch (fetchErr) {
+    throw new Error('通信失敗: ' + (fetchErr && fetchErr.message ? fetchErr.message : fetchErr));
+  }
   if (!res.ok) throw new Error('HTTP ' + res.status);
-  const result = await res.json();
+  const text = await res.text();
+  let result;
+  try { result = JSON.parse(text); }
+  catch (pe) { throw new Error('JSONパース失敗: ' + text.substring(0, 150)); }
   console.log('レスポンス:', JSON.stringify(result));
+  if (result && result.error) throw new Error('GASエラー: ' + result.error);
   return result;
 }
 
@@ -1881,13 +1890,23 @@ async function saveSheetToServer(sheetType) {
   } else if (sheetType === "mech") {
     payload = { action: 'saveMechanical', month: weeklyData.targetMonth, mechanical: weeklyData.mechanical };
   }
-  const res = await fetchWithTimeout(GAS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify(payload)
-  }, 30000);
+  let res;
+  try {
+    res = await fetchWithTimeout(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload)
+    }, 30000);
+  } catch (fetchErr) {
+    throw new Error('通信失敗: ' + (fetchErr && fetchErr.message ? fetchErr.message : fetchErr));
+  }
   if (!res.ok) throw new Error('HTTP ' + res.status);
-  return await res.json();
+  const text = await res.text();
+  let result;
+  try { result = JSON.parse(text); }
+  catch (pe) { throw new Error('JSONパース失敗: ' + text.substring(0, 150)); }
+  if (result && result.error) throw new Error('GASエラー: ' + result.error);
+  return result;
 }
 
 // GASからデータを取得（全シート）
@@ -2407,7 +2426,9 @@ function bindEvents() {
       showToast("保存しました（サーバー同期完了）");
     } catch (e) {
       setConnectionStatus(false);
-      showToast("端末に保存しました（サーバー同期に失敗。後で再試行してください）", "warn");
+      const msg = e && e.message ? e.message : String(e);
+      console.error('saveCurrentToServer error:', e);
+      showToast("端末保存OK / サーバー同期失敗: " + msg, "warn");
     } finally {
       btnSave.textContent = "保存";
       btnSave.disabled = false;
@@ -2438,7 +2459,9 @@ function bindEvents() {
       } catch (e) {
         allOk = false;
         setConnectionStatus(false);
-        showToast(step.label.replace("中...", "失敗"), "error");
+        const msg = e && e.message ? e.message : String(e);
+        console.error(step.sheet + ' sync error:', e);
+        showToast(step.label.replace("中...", "失敗") + ": " + msg, "error");
         break;
       }
     }
