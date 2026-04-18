@@ -904,12 +904,12 @@ header h1 {
   <button type="button" class="btn-sync" id="btnSync">同期</button>
 </div>
 
-<div class="excel-wrap">
-  <button type="button" class="btn-excel" id="btnExcel">📄 Excel出力（日常水質）</button>
-</div>
-
 <div class="mldo-wrap">
   <button type="button" class="btn-mldo" id="btnMldo">⚗ MLDO計算</button>
+</div>
+
+<div class="excel-wrap">
+  <button type="button" class="btn-excel" id="btnExcel">📄 Excel出力（日常水質）</button>
 </div>
 
 <div class="info-bar">データは端末に保存されます（localStorage）</div>
@@ -2662,9 +2662,9 @@ async function exportExcel() {
     }
   } catch (e) { console.error("fillWaterSheet:", e); }
 
-  try { const wsEq = wb.getWorksheet("機器運転時間"); if (wsEq) fillEquipSheet(wsEq); } catch (e) { console.error("fillEquipSheet:", e); }
-  try { const wsEl = wb.getWorksheet("日常電気設備"); if (wsEl) fillElecSheet(wsEl); } catch (e) { console.error("fillElecSheet:", e); }
-  try { const wsMe = wb.getWorksheet("日常機械設備"); if (wsMe) fillMechSheet(wsMe); } catch (e) { console.error("fillMechSheet:", e); }
+  try { const wsEq = wb.getWorksheet("機器運転時間"); if (wsEq) fillEquipSheet(wsEq, yyyy, mm); } catch (e) { console.error("fillEquipSheet:", e); }
+  try { const wsEl = wb.getWorksheet("日常電気設備"); if (wsEl) fillElecSheet(wsEl, yyyy, mm); } catch (e) { console.error("fillElecSheet:", e); }
+  try { const wsMe = wb.getWorksheet("日常機械設備"); if (wsMe) fillMechSheet(wsMe, yyyy, mm); } catch (e) { console.error("fillMechSheet:", e); }
 
   // 水質管理報告 / 運転管理月報 はテンプレートの数式が自動計算するため書込不要
 
@@ -2682,6 +2682,7 @@ async function exportExcel() {
 }
 
 // 日常水質シート（週オフセット: 1→0, 2→46, 3→92, 4→138, 5→184）
+// ※このシートのみ月跨ぎOK（対象月外の日付でも書き込む）
 function fillWaterSheet(ws, yyyy, mm) {
   const WEEK_OFFSETS = { 1: 0, 2: 46, 3: 92, 4: 138, 5: 184 };
   // 日曜 I=9, 月 J=10, 火 K=11, 水 L=12, 木 M=13, 金 N=14
@@ -2745,11 +2746,10 @@ function fillWaterSheet(ws, yyyy, mm) {
 }
 
 // 機器運転時間シート（週開始行: 7, 27, 47, 67, 87）
-function fillEquipSheet(ws) {
+// ※対象月内の日付のみ書き込み（月跨ぎ日はスキップ）
+function fillEquipSheet(ws, yyyy, mm) {
   const WEEK_START = { 1: 7, 2: 27, 3: 47, 4: 67, 5: 87 };
   const DAY_COL = { mon: 4, tue: 5, wed: 6, thu: 7, fri: 8 };
-  // EQUIP_KEYS の順序 = 行の順序（上から14項目）
-  // ALL_FIELDS と同様、EQUIP_KEYS 内の添え字が行オフセットになる
   for (let w = 1; w <= 5; w++) {
     const base = WEEK_START[w];
     const wData = weeklyData.equipment[w];
@@ -2759,6 +2759,10 @@ function fillEquipSheet(ws) {
       const dayData = wData[key];
       if (!dayData) return;
       for (const dk in DAY_COL) {
+        // その曜日の実日付を取得 → 対象月でなければスキップ
+        const actual = getActualDate(w, dk);
+        if (!actual) continue;
+        if (actual.getFullYear() !== yyyy || (actual.getMonth() + 1) !== mm) continue;
         setCell(ws, row, DAY_COL[dk], dayData[dk]);
       }
     });
@@ -2766,7 +2770,8 @@ function fillEquipSheet(ws) {
 }
 
 // 電気設備シート（週開始行: 3, 37, 71, 105, 139 / 月=G=7〜金=K=11）
-function fillElecSheet(ws) {
+// ※対象月内の日付のみ書き込み（月跨ぎ日はスキップ）
+function fillElecSheet(ws, yyyy, mm) {
   const WEEK_START = { 1: 3, 2: 37, 3: 71, 4: 105, 5: 139 };
   const DAY_COL = { mon: 7, tue: 8, wed: 9, thu: 10, fri: 11 };
   const OFFSETS = {
@@ -2785,6 +2790,10 @@ function fillElecSheet(ws) {
     const wData = weeklyData.electrical[w];
     if (!wData) continue;
     for (const dk in DAY_COL) {
+      // 対象月チェック
+      const actual = getActualDate(w, dk);
+      if (!actual) continue;
+      if (actual.getFullYear() !== yyyy || (actual.getMonth() + 1) !== mm) continue;
       const col = DAY_COL[dk];
       const day = wData[dk];
       if (!day) continue;
@@ -2796,7 +2805,8 @@ function fillElecSheet(ws) {
 }
 
 // 機械設備シート（1/2=MECH_1_MAP, 2/2=MECH_2_MAP オフセット / 月火水木のみ：4日）
-function fillMechSheet(ws) {
+// ※対象月内の日付のみ書き込み（月跨ぎ日はスキップ）
+function fillMechSheet(ws, yyyy, mm) {
   const MECH_WEEK = {
     1: { p1: 0, p2: 63 },
     2: { p1: 125, p2: 188 },
@@ -2846,6 +2856,10 @@ function fillMechSheet(ws) {
     const wData = weeklyData.mechanical[w];
     if (!wData) continue;
     for (const dk in DAY_COL) {
+      // 対象月チェック
+      const actual = getActualDate(w, dk);
+      if (!actual) continue;
+      if (actual.getFullYear() !== yyyy || (actual.getMonth() + 1) !== mm) continue;
       const col = DAY_COL[dk];
       const day = wData[dk];
       if (!day) continue;
