@@ -3049,11 +3049,12 @@ async function exportExcel() {
 }
 
 // 日常水質シート（週オフセット: 1→0, 2→46, 3→92, 4→138, 5→184）
-// テンプレ仕様: I列=日曜(使わない), J列=月曜, K列=火曜, L列=水曜, M列=木曜, N列=金曜
+// テンプレ配置: I列=月曜, J列=火曜, K列=水曜, L列=木曜, M列=金曜, N列=次週の最初の平日（日付のみ、参考表示）
 function fillWaterSheet(ws, yyyy, mm) {
   const WEEK_OFFSETS = { 1: 0, 2: 46, 3: 92, 4: 138, 5: 184 };
-  // 月 J=10, 火 K=11, 水 L=12, 木 M=13, 金 N=14
-  const DAY_COL = { mon: 10, tue: 11, wed: 12, thu: 13, fri: 14 };
+  // 月 I=9, 火 J=10, 水 K=11, 木 L=12, 金 M=13
+  const DAY_COL = { mon: 9, tue: 10, wed: 11, thu: 12, fri: 13 };
+  const NEXT_WEEK_COL = 14; // N列 = 次週の最初の平日
   const ITEM_OFFSETS = {
     power200v: 0, power100v: 1, water: 2, diesel: 3,
     returnSludge: 4, excessSludge: 5, discharge: 6,
@@ -3075,9 +3076,7 @@ function fillWaterSheet(ws, yyyy, mm) {
     const inspRow = INSP_ROW_BASE + offset;
 
     // ===== 日付を値で書き込み（数式を完全に上書き、UTC正午で1日ずれ防止） =====
-    // I列（日曜）は空欄
-    ws.getCell(dateRow, 9).value = null;
-    // J〜N: 月〜金 の日付を値として書く
+    // I〜M: 月〜金 の日付を値として書く
     for (const dk in DAY_COL) {
       const col = DAY_COL[dk];
       const actual = getActualDate(w, dk);
@@ -3087,9 +3086,19 @@ function fillWaterSheet(ws, yyyy, mm) {
         cell.numFmt = 'm"月"d"日("aaa")"';
       }
     }
+    // N列: 次週の最初の平日（= 金曜+3日 = 次週月曜）の日付のみ
+    const fri = getActualDate(w, "fri");
+    if (fri) {
+      const nextMon = new Date(fri.getFullYear(), fri.getMonth(), fri.getDate() + 3);
+      const cell = ws.getCell(dateRow, NEXT_WEEK_COL);
+      cell.value = toExcelDate(nextMon);
+      cell.numFmt = 'm"月"d"日("aaa")"';
+    } else {
+      ws.getCell(dateRow, NEXT_WEEK_COL).value = null;
+    }
 
     // ===== 各曜日データを書き込み =====
-    // アプリ側のデータキー: mon, tue, wed, thu, nextMon → テンプレの 月火水木金 に対応
+    // アプリ側のデータキー: mon, tue, wed, thu, nextMon（アプリ上は「金」ラベル）
     const appKeyMap = { mon: "mon", tue: "tue", wed: "wed", thu: "thu", fri: "nextMon" };
     for (const dk in DAY_COL) {
       const col = DAY_COL[dk];
