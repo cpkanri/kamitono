@@ -2950,17 +2950,18 @@ function fillWaterSheet(ws, yyyy, mm) {
     const dataRowBase = DATA_ROW_BASE + offset;
     const inspRow = INSP_ROW_BASE + offset;
 
-    // 日付の扱い：
-    // - I3（日曜）には実日付を入れる（P1や他セルの数式連鎖を壊さないため）
-    //   ただし表示形式 ";;;" で見た目だけ空欄にする
-    // - J〜N（月〜金）はテンプレ数式のままで連動
-    if (w === 1) {
-      const mon = getActualDate(1, "mon");
-      if (mon) {
-        const sun = new Date(mon); sun.setDate(mon.getDate() - 1);
-        const cellI3 = ws.getCell(dateRow, 9);
-        cellI3.value = sun;
-        cellI3.numFmt = ';;;'; // 見た目だけ空白（値は保持）
+    // ===== 全週のI列〜N列の日付を値で書き込み（数式を完全に上書き） =====
+    // I列（日曜）は空欄、J〜N（月〜金）は実日付を値で設定
+    ws.getCell(dateRow, 9).value = null;
+    const weekdayMap = { 10: "mon", 11: "tue", 12: "wed", 13: "thu", 14: "nextMon" };
+    for (const colStr in weekdayMap) {
+      const col = parseInt(colStr, 10);
+      const dk = weekdayMap[colStr];
+      const actual = getActualDate(w, dk);
+      if (actual) {
+        const cell = ws.getCell(dateRow, col);
+        cell.value = actual;
+        cell.numFmt = 'm"月"d"日("aaa")"';
       }
     }
 
