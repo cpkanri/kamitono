@@ -2889,12 +2889,16 @@ async function exportExcel() {
   const ym = weeklyData.targetMonth || document.getElementById("targetMonth").value;
   const [yyyy, mm] = ym.split("-").map(Number);
 
-  // 日常水質シート: 対象月の情報セル P1（日付全体の参照元）
+  // 日常水質シート: P1 に対象月の1日を固定値として書き込む
+  // テンプレの P1 は I3 参照式なので、これを値で上書きして月報シート連動を安定化
   try {
     const wsWater = wb.getWorksheet("日常水質");
     if (wsWater) {
-      // P1 は通常 YYYY-MM-01 の日付が入る（テンプレ依存）
-      setCell(wsWater, 1, 16, new Date(yyyy, mm - 1, 1));
+      const p1Cell = wsWater.getCell(1, 16);
+      // 既存の数式をクリアしてから値を設定（ExcelJSの仕様対策）
+      p1Cell.value = null;
+      p1Cell.value = new Date(yyyy, mm - 1, 1);
+      p1Cell.numFmt = 'yyyy"年"m"月"';
       fillWaterSheet(wsWater, yyyy, mm);
     }
   } catch (e) { console.error("fillWaterSheet:", e); }
@@ -2946,24 +2950,18 @@ function fillWaterSheet(ws, yyyy, mm) {
     const dataRowBase = DATA_ROW_BASE + offset;
     const inspRow = INSP_ROW_BASE + offset;
 
-    // 日付: 第1週の J〜N（月〜金）に直接日付を値で設定してテンプレ数式を上書き
-    // これで先頭の土日（I列）を空にできる。第2週以降はテンプレ数式 =N4等 に任せる。
+    // 日付の扱い：
+    // - I3（日曜）には実日付を入れる（P1や他セルの数式連鎖を壊さないため）
+    //   ただし表示形式 ";;;" で見た目だけ空欄にする
+    // - J〜N（月〜金）はテンプレ数式のままで連動
     if (w === 1) {
-      // I3（日曜）は空のまま（何も書き込まない）
-      // J3〜N3 に月〜金の日付を書き込む
-      const weekdayMap = { 10: "mon", 11: "tue", 12: "wed", 13: "thu", 14: "nextMon" };
-      for (const colStr in weekdayMap) {
-        const col = parseInt(colStr, 10);
-        const dk = weekdayMap[colStr];
-        const actual = getActualDate(1, dk);
-        if (actual) {
-          const cell = ws.getCell(dateRow, col);
-          cell.value = actual;
-          // テンプレの書式 m"月"d"日("aaa) を維持
-        }
+      const mon = getActualDate(1, "mon");
+      if (mon) {
+        const sun = new Date(mon); sun.setDate(mon.getDate() - 1);
+        const cellI3 = ws.getCell(dateRow, 9);
+        cellI3.value = sun;
+        cellI3.numFmt = ';;;'; // 見た目だけ空白（値は保持）
       }
-      // I3 に残っているテンプレ値（日曜日）を明示的に空にする
-      ws.getCell(dateRow, 9).value = null;
     }
 
     // 各曜日データを書き込み
