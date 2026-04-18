@@ -3013,11 +3013,11 @@ async function exportExcel() {
 }
 
 // 日常水質シート（週オフセット: 1→0, 2→46, 3→92, 4→138, 5→184）
-// ※このシートのみ月跨ぎOK（対象月外の日付でも書き込む）
+// テンプレ仕様: I列=月曜, J列=火曜, K列=水曜, L列=木曜, M列=金曜, N列=翌週月曜（使わない）
 function fillWaterSheet(ws, yyyy, mm) {
   const WEEK_OFFSETS = { 1: 0, 2: 46, 3: 92, 4: 138, 5: 184 };
-  // 日曜 I=9, 月 J=10, 火 K=11, 水 L=12, 木 M=13, 金 N=14
-  const DAY_COL = { mon: 10, tue: 11, wed: 12, thu: 13, nextMon: 14 };
+  // 月 I=9, 火 J=10, 水 K=11, 木 L=12, 金 M=13
+  const DAY_COL = { mon: 9, tue: 10, wed: 11, thu: 12, fri: 13 };
   const ITEM_OFFSETS = {
     power200v: 0, power100v: 1, water: 2, diesel: 3,
     returnSludge: 4, excessSludge: 5, discharge: 6,
@@ -3032,21 +3032,16 @@ function fillWaterSheet(ws, yyyy, mm) {
   const DATE_ROW_BASE = 3;
   const INSP_ROW_BASE = 13;
 
-  // 第1週の月曜日付を I3 と同列で書く（テンプレは I3 に日曜=月曜-1 の日付が入る設計）
-  // ただし、日常水質テンプレ I3 は式ではなく値。自分で書き込んでOK。
   for (let w = 1; w <= 5; w++) {
     const offset = WEEK_OFFSETS[w];
     const dateRow = DATE_ROW_BASE + offset;
     const dataRowBase = DATA_ROW_BASE + offset;
     const inspRow = INSP_ROW_BASE + offset;
 
-    // ===== 全週のI列〜N列の日付を値で書き込み（数式を完全に上書き） =====
-    // I列（日曜）は空欄、J〜N（月〜金）は実日付を値で設定
-    ws.getCell(dateRow, 9).value = null;
-    const weekdayMap = { 10: "mon", 11: "tue", 12: "wed", 13: "thu", 14: "nextMon" };
-    for (const colStr in weekdayMap) {
-      const col = parseInt(colStr, 10);
-      const dk = weekdayMap[colStr];
+    // ===== 日付を値で書き込み（数式を完全に上書き） =====
+    // テンプレ配置: I=月曜, J=火曜, K=水曜, L=木曜, M=金曜
+    for (const dk in DAY_COL) {
+      const col = DAY_COL[dk];
       const actual = getActualDate(w, dk);
       if (actual) {
         const cell = ws.getCell(dateRow, col);
@@ -3054,12 +3049,17 @@ function fillWaterSheet(ws, yyyy, mm) {
         cell.numFmt = 'm"月"d"日("aaa")"';
       }
     }
+    // N列（翌週月曜）は空に
+    ws.getCell(dateRow, 14).value = null;
 
-    // 各曜日データを書き込み
-    ["mon", "tue", "wed", "thu", "nextMon"].forEach(dk => {
+    // ===== 各曜日データを書き込み =====
+    // アプリ側のデータキー: mon, tue, wed, thu, nextMon → テンプレの 月火水木金 に対応
+    const appKeyMap = { mon: "mon", tue: "tue", wed: "wed", thu: "thu", fri: "nextMon" };
+    for (const dk in DAY_COL) {
       const col = DAY_COL[dk];
-      const day = weeklyData.weeks[w] && weeklyData.weeks[w][dk];
-      if (!day) return;
+      const dataKey = appKeyMap[dk];
+      const day = weeklyData.weeks[w] && weeklyData.weeks[w][dataKey];
+      if (!day) continue;
       for (const key in ITEM_OFFSETS) {
         const row = dataRowBase + ITEM_OFFSETS[key];
         const v = day[key];
@@ -3067,14 +3067,16 @@ function fillWaterSheet(ws, yyyy, mm) {
       }
       // 測定者
       if (day.inspector) setCell(ws, inspRow, col, day.inspector);
-    });
+    }
 
-    // 備考（最初の曜日のみ、Row = dataRowBase + 32）
+    // 備考（Row = dataRowBase + 32）
     const bikouRow = dataRowBase + 32;
-    for (const dk of ["mon", "tue", "wed", "thu", "nextMon"]) {
-      const day = weeklyData.weeks[w] && weeklyData.weeks[w][dk];
+    for (const dk in DAY_COL) {
+      const col = DAY_COL[dk];
+      const dataKey = appKeyMap[dk];
+      const day = weeklyData.weeks[w] && weeklyData.weeks[w][dataKey];
       if (day && day.bikou) {
-        setCell(ws, bikouRow, DAY_COL[dk], day.bikou);
+        setCell(ws, bikouRow, col, day.bikou);
       }
     }
   }
@@ -3129,9 +3131,12 @@ function fillEquipSheet(ws, yyyy, mm) {
 
 // 電気設備シート（週開始行: 3, 37, 71, 105, 139 / 月=G=7〜金=K=11）
 // ※対象月内の日付のみ書き込み（月跨ぎ日はスキップ）
+// ※日付ヘッダー：各週の Row2, 36, 70, 104, 138 の G〜K列（月〜金）に対象月のみ
 function fillElecSheet(ws, yyyy, mm) {
   const WEEK_START = { 1: 3, 2: 37, 3: 71, 4: 105, 5: 139 };
   const DAY_COL = { mon: 7, tue: 8, wed: 9, thu: 10, fri: 11 };
+  // 日付ヘッダー行: 各週の開始行の1つ上
+  const DATE_HEADER_ROW = { 1: 2, 2: 36, 3: 70, 4: 104, 5: 138 };
   const OFFSETS = {
     voltage1p: 0, mode1p: 1, switch1p: 2, power1p: 3,
     voltage3p: 4, mode3p: 5, switch3p: 6, power3p: 7,
@@ -3145,10 +3150,26 @@ function fillElecSheet(ws, yyyy, mm) {
   };
   for (let w = 1; w <= 5; w++) {
     const base = WEEK_START[w];
+    const headerRow = DATE_HEADER_ROW[w];
     const wData = weeklyData.electrical[w];
+
+    // 日付ヘッダー書き込み（対象月の日付のみ、月跨ぎ日はスキップ）
+    for (const dk in DAY_COL) {
+      const col = DAY_COL[dk];
+      const actual = getActualDate(w, dk);
+      if (!actual) continue;
+      if (actual.getFullYear() !== yyyy || (actual.getMonth() + 1) !== mm) {
+        // 対象月外なら空に
+        ws.getCell(headerRow, col).value = null;
+        continue;
+      }
+      const cell = ws.getCell(headerRow, col);
+      cell.value = actual;
+      cell.numFmt = 'd"日("aaa")"';
+    }
+
     if (!wData) continue;
     for (const dk in DAY_COL) {
-      // 対象月チェック
       const actual = getActualDate(w, dk);
       if (!actual) continue;
       if (actual.getFullYear() !== yyyy || (actual.getMonth() + 1) !== mm) continue;
@@ -3162,8 +3183,9 @@ function fillElecSheet(ws, yyyy, mm) {
   }
 }
 
-// 機械設備シート（1/2=MECH_1_MAP, 2/2=MECH_2_MAP オフセット / 月火水木のみ：4日）
+// 機械設備シート（1/2=MECH_1_MAP, 2/2=MECH_2_MAP オフセット / 月火水木金の5日）
 // ※対象月内の日付のみ書き込み（月跨ぎ日はスキップ）
+// ※日付ヘッダー: Row3, 66 / 128, 191 / 253, 316 / 378, 441 / 503, 566 の E, G, I, K, M 列
 function fillMechSheet(ws, yyyy, mm) {
   const MECH_WEEK = {
     1: { p1: 0, p2: 63 },
@@ -3172,7 +3194,8 @@ function fillMechSheet(ws, yyyy, mm) {
     4: { p1: 375, p2: 438 },
     5: { p1: 500, p2: 563 }
   };
-  const DAY_COL = { mon: 7, tue: 9, wed: 11, thu: 13 }; // fri 列はテンプレに存在しない
+  // データ書き込み列: 月E=5, 火G=7, 水I=9, 木K=11, 金M=13
+  const DAY_COL = { mon: 5, tue: 7, wed: 9, thu: 11, fri: 13 };
   const MAP1 = {
     pumpWellCheck: 4, mainPump1Current: 5, mainPump1Pressure: 6, mainPump1Vibration: 7,
     mainPump2Current: 8, mainPump2Pressure: 9, mainPump2Vibration: 10,
@@ -3209,9 +3232,39 @@ function fillMechSheet(ws, yyyy, mm) {
     deodor2Leak: 85, deodor2Exit: 86,
     deodor3Leak: 87, deodor3Exit: 88
   };
+  // 日付ヘッダー行: 1/2 ページ=Row3/66/128/191/254、2/2 ページ=Row66/128/191/254/317
+  // ただし各ページの上部ヘッダー Row3 や Row66 などに対応する「令和〇年〇月分」ラベルと日付が両方ある
+  // ここでは 1/2 ページの Row3 と、2/2 ページ（p2=p1+63）の Row3+p2 にも日付を書き込む
+  const MECH_DATE_HEADER_ROWS = {
+    1: [3, 66],   // 第1週：Row3（1/2）と Row66（2/2）
+    2: [128, 191], // 第2週
+    3: [253, 316],
+    4: [378, 441],
+    5: [503, 566]
+  };
+
   for (let w = 1; w <= 5; w++) {
     const wk = MECH_WEEK[w];
     const wData = weeklyData.mechanical[w];
+
+    // 日付ヘッダー書き込み（対象月の日付のみ、月跨ぎ日はスキップ）
+    const headerRows = MECH_DATE_HEADER_ROWS[w] || [];
+    for (const hr of headerRows) {
+      for (const dk in DAY_COL) {
+        // 日付ヘッダー列は DAY_COL と同じ（E=5, G=7, I=9, K=11, M=13）
+        const dateCol = DAY_COL[dk];
+        const actual = getActualDate(w, dk);
+        if (!actual) continue;
+        if (actual.getFullYear() !== yyyy || (actual.getMonth() + 1) !== mm) {
+          ws.getCell(hr, dateCol).value = null;
+          continue;
+        }
+        const cell = ws.getCell(hr, dateCol);
+        cell.value = actual;
+        cell.numFmt = 'd"日("aaa")"';
+      }
+    }
+
     if (!wData) continue;
     for (const dk in DAY_COL) {
       // 対象月チェック
