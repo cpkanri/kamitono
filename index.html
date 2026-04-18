@@ -2907,7 +2907,40 @@ async function exportExcel() {
   try { const wsEl = wb.getWorksheet("日常電気設備"); if (wsEl) fillElecSheet(wsEl, yyyy, mm); } catch (e) { console.error("fillElecSheet:", e); }
   try { const wsMe = wb.getWorksheet("日常機械設備"); if (wsMe) fillMechSheet(wsMe, yyyy, mm); } catch (e) { console.error("fillMechSheet:", e); }
 
-  // 水質管理報告 / 運転管理月報 はテンプレートの数式が自動計算するため書込不要
+  // 水質管理報告と運転管理月報の日付列（A列）に日次日付を書き込み
+  // 修正済みテンプレでは A列の日付参照式が削除されているため、値で書き込む必要がある
+  try {
+    const daysInMonth = new Date(yyyy, mm, 0).getDate();
+    const dailyDates = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      dailyDates.push(new Date(yyyy, mm - 1, d));
+    }
+
+    // 水質管理報告 A8-A38（1/2ページ）と A49-A79（2/2ページ）に1-31日
+    const wsReport = wb.getWorksheet("水質管理報告");
+    if (wsReport) {
+      for (let d = 0; d < daysInMonth; d++) {
+        // 1/2 ページ
+        const cell1 = wsReport.getCell(8 + d, 1);
+        cell1.value = dailyDates[d];
+        cell1.numFmt = 'd';
+        // 2/2 ページ
+        const cell2 = wsReport.getCell(49 + d, 1);
+        cell2.value = dailyDates[d];
+        cell2.numFmt = 'd';
+      }
+    }
+
+    // 運転管理月報 A6-A36
+    const wsMonthly = wb.getWorksheet("運転管理月報");
+    if (wsMonthly) {
+      for (let d = 0; d < daysInMonth; d++) {
+        const cell = wsMonthly.getCell(6 + d, 1);
+        cell.value = dailyDates[d];
+        cell.numFmt = 'd';
+      }
+    }
+  } catch (e) { console.error("Daily dates fill:", e); }
 
   const out = await wb.xlsx.writeBuffer();
   const blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
