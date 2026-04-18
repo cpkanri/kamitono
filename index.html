@@ -2946,15 +2946,24 @@ function fillWaterSheet(ws, yyyy, mm) {
     const dataRowBase = DATA_ROW_BASE + offset;
     const inspRow = INSP_ROW_BASE + offset;
 
-    // 日付: 第1週は月曜日 = weeklyData.startDate, 以降は +7日
-    const mon = getActualDate(w, "mon");
-    if (mon) {
-      // I列(9)=日曜(=月曜-1), J-N は +1〜+5日 でテンプレ式
-      // 第1週 I3 は値で入れる。第2週以降の I49 は式（=N4等）なので触らない。
-      if (w === 1) {
-        const sun = new Date(mon); sun.setDate(mon.getDate() - 1);
-        setCell(ws, dateRow, 9, sun);
+    // 日付: 第1週の J〜N（月〜金）に直接日付を値で設定してテンプレ数式を上書き
+    // これで先頭の土日（I列）を空にできる。第2週以降はテンプレ数式 =N4等 に任せる。
+    if (w === 1) {
+      // I3（日曜）は空のまま（何も書き込まない）
+      // J3〜N3 に月〜金の日付を書き込む
+      const weekdayMap = { 10: "mon", 11: "tue", 12: "wed", 13: "thu", 14: "nextMon" };
+      for (const colStr in weekdayMap) {
+        const col = parseInt(colStr, 10);
+        const dk = weekdayMap[colStr];
+        const actual = getActualDate(1, dk);
+        if (actual) {
+          const cell = ws.getCell(dateRow, col);
+          cell.value = actual;
+          // テンプレの書式 m"月"d"日("aaa) を維持
+        }
       }
+      // I3 に残っているテンプレ値（日曜日）を明示的に空にする
+      ws.getCell(dateRow, 9).value = null;
     }
 
     // 各曜日データを書き込み
@@ -2984,12 +2993,35 @@ function fillWaterSheet(ws, yyyy, mm) {
 
 // 機器運転時間シート（週開始行: 7, 27, 47, 67, 87）
 // ※対象月内の日付のみ書き込み（月跨ぎ日はスキップ）
+// ※A列・F列には週の開始・終了日付を令和形式で書き込む
 function fillEquipSheet(ws, yyyy, mm) {
   const WEEK_START = { 1: 7, 2: 27, 3: 47, 4: 67, 5: 87 };
   const DAY_COL = { mon: 4, tue: 5, wed: 6, thu: 7, fri: 8 };
+  // 各週ごとの日付ヘッダー位置: 第1週 A3/F3, 第2週 A23/F23, 第3週 A43/F43, 第4週 A63/F63, 第5週 A83/F83
+  const DATE_HEADER_ROW = { 1: 3, 2: 23, 3: 43, 4: 63, 5: 83 };
+  const REIWA_FORMAT = '[$-411]ggge"年"m"月"d"日";@';
+
   for (let w = 1; w <= 5; w++) {
     const base = WEEK_START[w];
     const wData = weeklyData.equipment[w];
+
+    // 日付ヘッダー設定（A列=月曜, F列=金曜 を令和形式で）
+    const headerRow = DATE_HEADER_ROW[w];
+    if (headerRow) {
+      const mon = getActualDate(w, "mon");
+      const fri = getActualDate(w, "fri");
+      if (mon) {
+        const cellA = ws.getCell(headerRow, 1);
+        cellA.value = mon;
+        cellA.numFmt = REIWA_FORMAT;
+      }
+      if (fri) {
+        const cellF = ws.getCell(headerRow, 6);
+        cellF.value = fri;
+        cellF.numFmt = REIWA_FORMAT;
+      }
+    }
+
     if (!wData) continue;
     EQUIP_KEYS.forEach((key, i) => {
       const row = base + i;
