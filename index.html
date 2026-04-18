@@ -2882,6 +2882,14 @@ function setCell(ws, row, col, val) {
   }
 }
 
+// ExcelJS 用の日付変換ヘルパー
+// JSの日付をExcelに書き込むときにタイムゾーンで -1日 ずれないようにする
+// UTC の 12:00 として書き込むことで、Excelは現地日付として正しく表示する
+function toExcelDate(date) {
+  if (!date) return null;
+  return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0));
+}
+
 // Base64 → ArrayBuffer
 function base64ToArrayBuffer(b64) {
   const bin = atob(b64);
@@ -2976,7 +2984,7 @@ async function exportExcel() {
       const p1Cell = wsWater.getCell(1, 16);
       // 既存の数式をクリアしてから値を設定（ExcelJSの仕様対策）
       p1Cell.value = null;
-      p1Cell.value = new Date(yyyy, mm - 1, 1);
+      p1Cell.value = toExcelDate(new Date(yyyy, mm - 1, 1));
       p1Cell.numFmt = 'yyyy"年"m"月"';
       fillWaterSheet(wsWater, yyyy, mm);
     }
@@ -2990,23 +2998,25 @@ async function exportExcel() {
   // 修正済みテンプレでは A列の日付参照式が削除されているため、値で書き込む必要がある
   try {
     const daysInMonth = new Date(yyyy, mm, 0).getDate();
-    const dailyDates = [];
-    for (let d = 1; d <= daysInMonth; d++) {
-      dailyDates.push(new Date(yyyy, mm - 1, d));
-    }
 
     // 水質管理報告 A8-A38（1/2ページ）と A49-A79（2/2ページ）に1-31日
     const wsReport = wb.getWorksheet("水質管理報告");
     if (wsReport) {
       for (let d = 0; d < daysInMonth; d++) {
+        const dateValue = toExcelDate(new Date(yyyy, mm - 1, d + 1));
         // 1/2 ページ
         const cell1 = wsReport.getCell(8 + d, 1);
-        cell1.value = dailyDates[d];
+        cell1.value = dateValue;
         cell1.numFmt = 'd';
         // 2/2 ページ
         const cell2 = wsReport.getCell(49 + d, 1);
-        cell2.value = dailyDates[d];
+        cell2.value = dateValue;
         cell2.numFmt = 'd';
+      }
+      // 対象月に存在しない日の行は空に（例：2月の29-31日、4月の31日など）
+      for (let d = daysInMonth; d < 31; d++) {
+        wsReport.getCell(8 + d, 1).value = null;
+        wsReport.getCell(49 + d, 1).value = null;
       }
     }
 
@@ -3015,8 +3025,12 @@ async function exportExcel() {
     if (wsMonthly) {
       for (let d = 0; d < daysInMonth; d++) {
         const cell = wsMonthly.getCell(6 + d, 1);
-        cell.value = dailyDates[d];
+        cell.value = toExcelDate(new Date(yyyy, mm - 1, d + 1));
         cell.numFmt = 'd';
+      }
+      // 対象月に存在しない日の行は空に
+      for (let d = daysInMonth; d < 31; d++) {
+        wsMonthly.getCell(6 + d, 1).value = null;
       }
     }
   } catch (e) { console.error("Daily dates fill:", e); }
@@ -3035,11 +3049,11 @@ async function exportExcel() {
 }
 
 // 日常水質シート（週オフセット: 1→0, 2→46, 3→92, 4→138, 5→184）
-// テンプレ仕様: I列=月曜, J列=火曜, K列=水曜, L列=木曜, M列=金曜, N列=翌週月曜（使わない）
+// テンプレ仕様: I列=日曜(使わない), J列=月曜, K列=火曜, L列=水曜, M列=木曜, N列=金曜
 function fillWaterSheet(ws, yyyy, mm) {
   const WEEK_OFFSETS = { 1: 0, 2: 46, 3: 92, 4: 138, 5: 184 };
-  // 月 I=9, 火 J=10, 水 K=11, 木 L=12, 金 M=13
-  const DAY_COL = { mon: 9, tue: 10, wed: 11, thu: 12, fri: 13 };
+  // 月 J=10, 火 K=11, 水 L=12, 木 M=13, 金 N=14
+  const DAY_COL = { mon: 10, tue: 11, wed: 12, thu: 13, fri: 14 };
   const ITEM_OFFSETS = {
     power200v: 0, power100v: 1, water: 2, diesel: 3,
     returnSludge: 4, excessSludge: 5, discharge: 6,
@@ -3060,19 +3074,19 @@ function fillWaterSheet(ws, yyyy, mm) {
     const dataRowBase = DATA_ROW_BASE + offset;
     const inspRow = INSP_ROW_BASE + offset;
 
-    // ===== 日付を値で書き込み（数式を完全に上書き） =====
-    // テンプレ配置: I=月曜, J=火曜, K=水曜, L=木曜, M=金曜
+    // ===== 日付を値で書き込み（数式を完全に上書き、UTC正午で1日ずれ防止） =====
+    // I列（日曜）は空欄
+    ws.getCell(dateRow, 9).value = null;
+    // J〜N: 月〜金 の日付を値として書く
     for (const dk in DAY_COL) {
       const col = DAY_COL[dk];
       const actual = getActualDate(w, dk);
       if (actual) {
         const cell = ws.getCell(dateRow, col);
-        cell.value = actual;
+        cell.value = toExcelDate(actual);
         cell.numFmt = 'm"月"d"日("aaa")"';
       }
     }
-    // N列（翌週月曜）は空に
-    ws.getCell(dateRow, 14).value = null;
 
     // ===== 各曜日データを書き込み =====
     // アプリ側のデータキー: mon, tue, wed, thu, nextMon → テンプレの 月火水木金 に対応
@@ -3118,20 +3132,31 @@ function fillEquipSheet(ws, yyyy, mm) {
     const base = WEEK_START[w];
     const wData = weeklyData.equipment[w];
 
-    // 日付ヘッダー設定（A列=月曜, F列=金曜 を令和形式で）
+    // 日付ヘッダー設定（A列=対象月内の最初の日, F列=対象月内の最後の日、令和形式）
     const headerRow = DATE_HEADER_ROW[w];
     if (headerRow) {
-      const mon = getActualDate(w, "mon");
-      const fri = getActualDate(w, "fri");
-      if (mon) {
-        const cellA = ws.getCell(headerRow, 1);
-        cellA.value = mon;
-        cellA.numFmt = REIWA_FORMAT;
+      // その週の月〜金のうち、対象月内にある日付を収集
+      const weekDates = [];
+      for (const dk of ["mon", "tue", "wed", "thu", "fri"]) {
+        const dt = getActualDate(w, dk);
+        if (dt && dt.getFullYear() === yyyy && (dt.getMonth() + 1) === mm) {
+          weekDates.push(dt);
+        }
       }
-      if (fri) {
+      // 対象月内の最初の日 → A列
+      if (weekDates.length > 0) {
+        const firstDay = weekDates[0];
+        const lastDay = weekDates[weekDates.length - 1];
+        const cellA = ws.getCell(headerRow, 1);
+        cellA.value = toExcelDate(firstDay);
+        cellA.numFmt = REIWA_FORMAT;
         const cellF = ws.getCell(headerRow, 6);
-        cellF.value = fri;
+        cellF.value = toExcelDate(lastDay);
         cellF.numFmt = REIWA_FORMAT;
+      } else {
+        // その週が全部対象月外ならA列もF列も空
+        ws.getCell(headerRow, 1).value = null;
+        ws.getCell(headerRow, 6).value = null;
       }
     }
 
@@ -3179,14 +3204,17 @@ function fillElecSheet(ws, yyyy, mm) {
     for (const dk in DAY_COL) {
       const col = DAY_COL[dk];
       const actual = getActualDate(w, dk);
-      if (!actual) continue;
+      if (!actual) {
+        ws.getCell(headerRow, col).value = null;
+        continue;
+      }
       if (actual.getFullYear() !== yyyy || (actual.getMonth() + 1) !== mm) {
         // 対象月外なら空に
         ws.getCell(headerRow, col).value = null;
         continue;
       }
       const cell = ws.getCell(headerRow, col);
-      cell.value = actual;
+      cell.value = toExcelDate(actual);
       cell.numFmt = 'd"日("aaa")"';
     }
 
@@ -3276,13 +3304,16 @@ function fillMechSheet(ws, yyyy, mm) {
         // 日付ヘッダー列は DAY_COL と同じ（E=5, G=7, I=9, K=11, M=13）
         const dateCol = DAY_COL[dk];
         const actual = getActualDate(w, dk);
-        if (!actual) continue;
+        if (!actual) {
+          ws.getCell(hr, dateCol).value = null;
+          continue;
+        }
         if (actual.getFullYear() !== yyyy || (actual.getMonth() + 1) !== mm) {
           ws.getCell(hr, dateCol).value = null;
           continue;
         }
         const cell = ws.getCell(hr, dateCol);
-        cell.value = actual;
+        cell.value = toExcelDate(actual);
         cell.numFmt = 'd"日("aaa")"';
       }
     }
