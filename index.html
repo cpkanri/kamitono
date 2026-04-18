@@ -2889,6 +2889,63 @@ async function exportExcel() {
   const ym = weeklyData.targetMonth || document.getElementById("targetMonth").value;
   const [yyyy, mm] = ym.split("-").map(Number);
 
+  // ===== テンプレートの日付関連数式を一括削除 =====
+  // ExcelJS で読み込んだ直後に、日付関連の問題のあるセルを null にすることで、
+  // Excel の再計算で月がずれる問題を根本解決する
+  try {
+    const wsWater = wb.getWorksheet("日常水質");
+    if (wsWater) {
+      // P1 の月判定式
+      wsWater.getCell(1, 16).value = null;
+      // I3〜N3（5週分）の日付式を全削除（後で値で書き込み）
+      for (const r of [3, 49, 95, 141, 187]) {
+        for (let c = 9; c <= 14; c++) {
+          wsWater.getCell(r, c).value = null;
+        }
+      }
+    }
+    // 水質管理報告 A列 日付参照
+    const wsReport = wb.getWorksheet("水質管理報告");
+    if (wsReport) {
+      for (const r of [...Array(31).keys()].map(i => 8 + i).concat([...Array(31).keys()].map(i => 49 + i))) {
+        wsReport.getCell(r, 1).value = null;
+      }
+    }
+    // 運転管理月報 A列 日付参照
+    const wsMonthly = wb.getWorksheet("運転管理月報");
+    if (wsMonthly) {
+      for (let r = 6; r <= 36; r++) {
+        wsMonthly.getCell(r, 1).value = null;
+      }
+    }
+    // 機器運転時間 A/F列 日付式
+    const wsEq0 = wb.getWorksheet("機器運転時間");
+    if (wsEq0) {
+      for (const r of [3, 23, 43, 63, 83]) {
+        wsEq0.getCell(r, 1).value = null;
+        wsEq0.getCell(r, 6).value = null;
+      }
+    }
+    // 日常電気設備 日付ヘッダー
+    const wsEl0 = wb.getWorksheet("日常電気設備");
+    if (wsEl0) {
+      for (const r of [2, 36, 70, 104, 138]) {
+        for (let c = 7; c <= 11; c++) {
+          wsEl0.getCell(r, c).value = null;
+        }
+      }
+    }
+    // 日常機械設備 日付ヘッダー
+    const wsMe0 = wb.getWorksheet("日常機械設備");
+    if (wsMe0) {
+      for (const r of [2, 3, 65, 66, 128, 129, 191, 192, 254, 255, 317, 318, 380, 381, 443, 444, 506, 507, 569, 570]) {
+        for (let c = 5; c <= 14; c++) {
+          wsMe0.getCell(r, c).value = null;
+        }
+      }
+    }
+  } catch (e) { console.error("テンプレ日付式クリア:", e); }
+
   // 日常水質シート: P1 に対象月の1日を固定値として書き込む
   // テンプレの P1 は I3 参照式なので、これを値で上書きして月報シート連動を安定化
   try {
