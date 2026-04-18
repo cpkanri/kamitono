@@ -528,13 +528,20 @@ header h1 {
 /* ===== ログイン画面 ===== */
 .login-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  min-height: 100vh;
   background: linear-gradient(135deg, #0d4f34, #1a7a56);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   z-index: 9999;
-  padding: 20px;
+  padding: 60px 20px 20px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .login-card {
   background: white;
@@ -543,6 +550,7 @@ header h1 {
   width: 100%;
   max-width: 340px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  margin-top: 40px;
 }
 .login-card h2 {
   margin: 0 0 8px;
@@ -567,8 +575,11 @@ header h1 {
   padding: 12px;
   border: 1px solid #ccd;
   border-radius: 8px;
-  font-size: 15px;
+  font-size: 16px; /* iOSで16px以上だとズームされない */
   font-family: inherit;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
 }
 .login-card button {
   width: 100%;
@@ -582,6 +593,8 @@ header h1 {
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
+  -webkit-appearance: none;
+  appearance: none;
 }
 .login-card button:disabled {
   opacity: 0.6;
@@ -596,6 +609,13 @@ header h1 {
   display: none;
 }
 .login-error.visible { display: block; }
+
+/* ログイン画面表示中は body のスクロールを止める */
+body.login-active {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+}
 
 /* ===== ログアウトボタン ===== */
 .user-info {
@@ -1068,12 +1088,13 @@ function withTokenBody(obj) {
 function showLoginScreen(errorMsg) {
   const overlay = document.getElementById('loginOverlay');
   if (overlay) overlay.style.display = 'flex';
+  document.body.classList.add('login-active');
   const errEl = document.getElementById('loginError');
   if (errEl) {
     if (errorMsg) { errEl.textContent = errorMsg; errEl.classList.add('visible'); }
     else { errEl.textContent = ''; errEl.classList.remove('visible'); }
   }
-  // フォーカス
+  // フォーカス（iOSキーボード出現時の挙動安定のため遅延を長めに）
   setTimeout(() => {
     const idEl = document.getElementById('loginId');
     if (idEl && !idEl.value) idEl.focus();
@@ -1081,11 +1102,12 @@ function showLoginScreen(errorMsg) {
       const pwEl = document.getElementById('loginPassword');
       if (pwEl) pwEl.focus();
     }
-  }, 100);
+  }, 300);
 }
 function hideLoginScreen() {
   const overlay = document.getElementById('loginOverlay');
   if (overlay) overlay.style.display = 'none';
+  document.body.classList.remove('login-active');
 }
 function handleAuthFailure() {
   clearAuth();
