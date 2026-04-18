@@ -525,6 +525,100 @@ header h1 {
   50% { box-shadow: 0 2px 12px rgba(255,152,0,0.6); }
 }
 
+/* ===== ログイン画面 ===== */
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(135deg, #0d4f34, #1a7a56);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+.login-card {
+  background: white;
+  border-radius: 12px;
+  padding: 28px 24px;
+  width: 100%;
+  max-width: 340px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.login-card h2 {
+  margin: 0 0 8px;
+  color: #0d4f34;
+  text-align: center;
+  font-size: 18px;
+}
+.login-card .subtitle {
+  text-align: center;
+  color: #888;
+  font-size: 12px;
+  margin-bottom: 20px;
+}
+.login-card label {
+  display: block;
+  font-size: 13px;
+  color: #555;
+  margin: 10px 0 4px;
+}
+.login-card input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ccd;
+  border-radius: 8px;
+  font-size: 15px;
+  font-family: inherit;
+}
+.login-card button {
+  width: 100%;
+  margin-top: 18px;
+  padding: 14px;
+  background: #0d4f34;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.login-card button:disabled {
+  opacity: 0.6;
+}
+.login-error {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #ffebee;
+  color: #c62828;
+  border-radius: 6px;
+  font-size: 13px;
+  display: none;
+}
+.login-error.visible { display: block; }
+
+/* ===== ログアウトボタン ===== */
+.user-info {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.9);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-logout {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
 /* ===== MLDO計算ボタン ===== */
 .mldo-wrap {
   padding: 0 14px 12px;
@@ -562,9 +656,27 @@ header h1 {
 </head>
 <body>
 
+<!-- ===== ログイン画面 ===== -->
+<div class="login-overlay" id="loginOverlay" style="display:none;">
+  <div class="login-card">
+    <h2>上殿浄化センター 週報</h2>
+    <div class="subtitle">ログインしてください</div>
+    <label for="loginId">ID</label>
+    <input type="text" id="loginId" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <label for="loginPassword">パスワード</label>
+    <input type="password" id="loginPassword" autocomplete="current-password">
+    <button type="button" id="btnLogin">ログイン</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
 <!-- ヘッダー -->
-<header>
+<header style="position: relative;">
   <h1>上殿浄化センター 週報入力</h1>
+  <div class="user-info" id="userInfo" style="display:none;">
+    <span id="userName"></span>
+    <button type="button" class="btn-logout" id="btnLogout">ログアウト</button>
+  </div>
   <div class="header-controls">
     <label>
       <span>対象年月</span>
@@ -920,6 +1032,127 @@ header h1 {
 <script>
 // ===== GAS URL =====
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbx1byxE6wXgxzPgHWFN4VRsEkcf6fp6CsvUEhdLg1OEr12gjlJqLzfpS4hHJxR9ZpS2/exec';
+
+// ===== 認証 =====
+const AUTH_KEYS = { token: 'uedono_auth_token', userId: 'uedono_auth_userId', userName: 'uedono_auth_userName', expires: 'uedono_auth_expires' };
+function getAuthToken() { return localStorage.getItem(AUTH_KEYS.token) || ''; }
+function getAuthUserId() { return localStorage.getItem(AUTH_KEYS.userId) || ''; }
+function getAuthUserName() { return localStorage.getItem(AUTH_KEYS.userName) || ''; }
+function saveAuth(token, userId, userName, expires) {
+  localStorage.setItem(AUTH_KEYS.token, token);
+  localStorage.setItem(AUTH_KEYS.userId, userId);
+  localStorage.setItem(AUTH_KEYS.userName, userName || userId);
+  localStorage.setItem(AUTH_KEYS.expires, String(expires || 0));
+}
+function clearAuth() {
+  Object.values(AUTH_KEYS).forEach(k => localStorage.removeItem(k));
+}
+function isAuthExpired() {
+  const exp = parseInt(localStorage.getItem(AUTH_KEYS.expires) || '0', 10);
+  if (!exp) return true;
+  return Date.now() >= exp;
+}
+// URLにtokenを付与するヘルパー
+function withToken(url) {
+  const token = getAuthToken();
+  if (!token) return url;
+  const sep = url.indexOf('?') >= 0 ? '&' : '?';
+  return url + sep + 'token=' + encodeURIComponent(token);
+}
+// POSTボディにtokenを付与
+function withTokenBody(obj) {
+  return Object.assign({}, obj, { token: getAuthToken() });
+}
+
+// ===== ログイン/ログアウト フロー =====
+function showLoginScreen(errorMsg) {
+  const overlay = document.getElementById('loginOverlay');
+  if (overlay) overlay.style.display = 'flex';
+  const errEl = document.getElementById('loginError');
+  if (errEl) {
+    if (errorMsg) { errEl.textContent = errorMsg; errEl.classList.add('visible'); }
+    else { errEl.textContent = ''; errEl.classList.remove('visible'); }
+  }
+  // フォーカス
+  setTimeout(() => {
+    const idEl = document.getElementById('loginId');
+    if (idEl && !idEl.value) idEl.focus();
+    else {
+      const pwEl = document.getElementById('loginPassword');
+      if (pwEl) pwEl.focus();
+    }
+  }, 100);
+}
+function hideLoginScreen() {
+  const overlay = document.getElementById('loginOverlay');
+  if (overlay) overlay.style.display = 'none';
+}
+function handleAuthFailure() {
+  clearAuth();
+  updateUserInfoUI();
+  showLoginScreen('セッションが切れました。再度ログインしてください。');
+}
+function updateUserInfoUI() {
+  const wrap = document.getElementById('userInfo');
+  const nameEl = document.getElementById('userName');
+  if (!wrap || !nameEl) return;
+  const name = getAuthUserName();
+  if (name) {
+    nameEl.textContent = name;
+    wrap.style.display = 'flex';
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+async function doLogin(userId, password) {
+  const payload = { action: 'login', userId: userId, password: password };
+  const res = await fetchWithTimeout(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify(payload)
+  }, 15000);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  if (data.status !== 'ok' || !data.token) throw new Error('ログイン応答が不正です');
+  saveAuth(data.token, data.userId, data.name || data.userId, data.expires || 0);
+  return data;
+}
+
+async function doLogout() {
+  const token = getAuthToken();
+  clearAuth();
+  updateUserInfoUI();
+  if (token) {
+    try {
+      await fetchWithTimeout(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'logout', token: token })
+      }, 10000);
+    } catch (e) {}
+  }
+  showLoginScreen();
+}
+
+// サーバー側でトークンが生きているか確認（起動時に叩く）
+async function verifyStoredToken() {
+  const token = getAuthToken();
+  if (!token) return false;
+  if (isAuthExpired()) { clearAuth(); return false; }
+  try {
+    const res = await fetchWithTimeout(withToken(GAS_URL + '?action=verifyToken'), { method: 'GET' }, 10000);
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (data.valid) return true;
+    clearAuth();
+    return false;
+  } catch (e) {
+    // ネットワーク失敗時はローカル判定で継続（オフライン許容）
+    return !isAuthExpired();
+  }
+}
 
 // ===== 定数定義 =====
 
@@ -1901,7 +2134,7 @@ async function saveCurrentToServer() {
     res = await fetchWithTimeout(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(withTokenBody(payload))
     }, 15000);
   } catch (fetchErr) {
     throw new Error('通信失敗: ' + (fetchErr && fetchErr.message ? fetchErr.message : fetchErr));
@@ -1912,6 +2145,7 @@ async function saveCurrentToServer() {
   try { result = JSON.parse(text); }
   catch (pe) { throw new Error('JSONパース失敗: ' + text.substring(0, 150)); }
   console.log('レスポンス:', JSON.stringify(result));
+  if (result && result.authRequired) { handleAuthFailure(); throw new Error('認証が切れました'); }
   if (result && result.error) throw new Error('GASエラー: ' + result.error);
   return result;
 }
@@ -1933,7 +2167,7 @@ async function saveSheetToServer(sheetType) {
     res = await fetchWithTimeout(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(withTokenBody(payload))
     }, 30000);
   } catch (fetchErr) {
     throw new Error('通信失敗: ' + (fetchErr && fetchErr.message ? fetchErr.message : fetchErr));
@@ -1943,16 +2177,19 @@ async function saveSheetToServer(sheetType) {
   let result;
   try { result = JSON.parse(text); }
   catch (pe) { throw new Error('JSONパース失敗: ' + text.substring(0, 150)); }
+  if (result && result.authRequired) { handleAuthFailure(); throw new Error('認証が切れました'); }
   if (result && result.error) throw new Error('GASエラー: ' + result.error);
   return result;
 }
 
 // GASからデータを取得（全シート）
 async function loadFromServer(month) {
-  const url = GAS_URL + '?action=getAllData&month=' + encodeURIComponent(month);
+  const url = withToken(GAS_URL + '?action=getAllData&month=' + encodeURIComponent(month));
   const res = await fetchWithTimeout(url, { method: 'GET' }, 15000);
   if (!res.ok) throw new Error('HTTP ' + res.status);
-  return await res.json();
+  const data = await res.json();
+  if (data && data.authRequired) { handleAuthFailure(); throw new Error('認証が切れました'); }
+  return data;
 }
 
 // 機器運転時間: 日本語名→キー変換マップ
@@ -2552,7 +2789,7 @@ function bindEvents() {
     const originalText = btn.textContent;
     btn.textContent = "計算中...";
     try {
-      const url = GAS_URL + '?action=computeMldo&month=' + encodeURIComponent(weeklyData.targetMonth);
+      const url = withToken(GAS_URL + '?action=computeMldo&month=' + encodeURIComponent(weeklyData.targetMonth));
       const res = await fetchWithTimeout(url, { method: 'GET' }, 30000);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
@@ -2578,7 +2815,7 @@ async function updateMldoStatus() {
   const btn = document.getElementById('btnMldo');
   if (!btn || !weeklyData.targetMonth) return;
   try {
-    const url = GAS_URL + '?action=checkMldo&month=' + encodeURIComponent(weeklyData.targetMonth);
+    const url = withToken(GAS_URL + '?action=checkMldo&month=' + encodeURIComponent(weeklyData.targetMonth));
     const res = await fetchWithTimeout(url, { method: 'GET' }, 10000);
     if (!res.ok) return;
     const data = await res.json();
@@ -2876,9 +3113,71 @@ function fillMechSheet(ws, yyyy, mm) {
 }
 
 
+// ===== ログイン/ログアウトボタンのイベント =====
+function bindLoginEvents() {
+  if (window.__loginEventsBound) return;
+  window.__loginEventsBound = true;
+
+  const btnLogin = document.getElementById('btnLogin');
+  const idEl = document.getElementById('loginId');
+  const pwEl = document.getElementById('loginPassword');
+  const errEl = document.getElementById('loginError');
+
+  async function tryLogin() {
+    const uid = (idEl.value || '').trim();
+    const pw = pwEl.value || '';
+    if (!uid || !pw) {
+      errEl.textContent = 'IDとパスワードを入力してください';
+      errEl.classList.add('visible');
+      return;
+    }
+    btnLogin.disabled = true;
+    btnLogin.textContent = 'ログイン中...';
+    errEl.classList.remove('visible');
+    try {
+      await doLogin(uid, pw);
+      pwEl.value = '';
+      await continueInit();
+    } catch (e) {
+      errEl.textContent = e.message || 'ログインに失敗しました';
+      errEl.classList.add('visible');
+    } finally {
+      btnLogin.disabled = false;
+      btnLogin.textContent = 'ログイン';
+    }
+  }
+
+  if (btnLogin) btnLogin.addEventListener('click', tryLogin);
+  [idEl, pwEl].forEach(el => {
+    if (el) el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') { ev.preventDefault(); tryLogin(); }
+    });
+  });
+
+  const btnLogout = document.getElementById('btnLogout');
+  if (btnLogout) btnLogout.addEventListener('click', async () => {
+    if (!confirm('ログアウトしますか？')) return;
+    await doLogout();
+  });
+}
+
 // ===== 初期化 =====
 
 async function init() {
+  // ---- 認証チェック ----
+  bindLoginEvents();
+  const authed = await verifyStoredToken();
+  if (!authed) {
+    showLoginScreen();
+    return; // ログイン完了後に continueInit() が呼ばれる
+  }
+  updateUserInfoUI();
+  return continueInit();
+}
+
+async function continueInit() {
+  hideLoginScreen();
+  updateUserInfoUI();
   // 対象月：前回保存 or 現在月
   const savedMonth = localStorage.getItem("uedono_current_month");
   const ym = savedMonth || currentYearMonth();
@@ -2895,7 +3194,10 @@ async function init() {
   document.getElementById("startDate").value = weeklyData.startDate;
   localStorage.setItem("uedono_current_month", weeklyData.targetMonth);
 
-  bindEvents();
+  if (!window.__eventsBound) {
+    bindEvents();
+    window.__eventsBound = true;
+  }
 
   // 初期表示
   updateWeekTabs();
