@@ -613,8 +613,6 @@ header h1 {
 /* ログイン画面表示中は body のスクロールを止める */
 body.login-active {
   overflow: hidden;
-  position: fixed;
-  width: 100%;
 }
 
 /* ===== ログアウトボタン ===== */
@@ -682,9 +680,9 @@ body.login-active {
     <h2>上殿浄化センター 週報</h2>
     <div class="subtitle">ログインしてください</div>
     <label for="loginId">ID</label>
-    <input type="text" id="loginId" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <input type="text" id="loginId" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="next">
     <label for="loginPassword">パスワード</label>
-    <input type="password" id="loginPassword" autocomplete="current-password">
+    <input type="password" id="loginPassword" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="go">
     <button type="button" id="btnLogin">ログイン</button>
     <div class="login-error" id="loginError"></div>
   </div>
@@ -1132,22 +1130,22 @@ function getHolidaySetFromCache() {
 
 function showLoginScreen(errorMsg) {
   const overlay = document.getElementById('loginOverlay');
-  if (overlay) overlay.style.display = 'flex';
+  if (!overlay) return;
+  const wasHidden = overlay.style.display !== 'flex';
+  overlay.style.display = 'flex';
   document.body.classList.add('login-active');
   const errEl = document.getElementById('loginError');
   if (errEl) {
     if (errorMsg) { errEl.textContent = errorMsg; errEl.classList.add('visible'); }
     else { errEl.textContent = ''; errEl.classList.remove('visible'); }
   }
-  // フォーカス（iOSキーボード出現時の挙動安定のため遅延を長めに）
-  setTimeout(() => {
-    const idEl = document.getElementById('loginId');
-    if (idEl && !idEl.value) idEl.focus();
-    else {
-      const pwEl = document.getElementById('loginPassword');
-      if (pwEl) pwEl.focus();
-    }
-  }, 300);
+  // 初回表示時のみフォーカス（重複呼び出しで入力中のフォーカスを奪わない）
+  if (wasHidden) {
+    setTimeout(() => {
+      const idEl = document.getElementById('loginId');
+      if (idEl && !idEl.value) idEl.focus();
+    }, 300);
+  }
 }
 function hideLoginScreen() {
   const overlay = document.getElementById('loginOverlay');
@@ -3027,6 +3025,16 @@ async function exportExcel() {
       for (const r of [3, 49, 95, 141, 187]) {
         for (let c = 9; c <= 14; c++) {
           wsWater.getCell(r, c).value = null;
+        }
+      }
+      // 各週の I4〜I10 の N列参照式（=N188, =N4 等）を削除
+      // これは「前週のN列データを次週Iに引き継ぐ」仕組みだが、現在のN列は日付のみなので不要
+      const WATER_WEEK_OFFSETS = { 1: 0, 2: 46, 3: 92, 4: 138, 5: 184 };
+      for (const w of [1, 2, 3, 4, 5]) {
+        const offset = WATER_WEEK_OFFSETS[w];
+        // I4〜I10（月曜データ7項目分）の N列参照を削除
+        for (let r = 4 + offset; r <= 10 + offset; r++) {
+          wsWater.getCell(r, 9).value = null;
         }
       }
     }
