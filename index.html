@@ -581,6 +581,13 @@ header h1 {
   -webkit-appearance: none;
   appearance: none;
 }
+/* パスワード欄：type="text" だが見た目はドット表示 */
+/* type="password" を使わずにChromeのパスワードマネージャー介入を回避 */
+.login-card input.pw-masked {
+  -webkit-text-security: disc;
+  text-security: disc;
+  font-family: text-security-disc, inherit;
+}
 .login-card button {
   width: 100%;
   margin-top: 18px;
@@ -682,7 +689,7 @@ body.login-active {
     <label for="loginId">ID</label>
     <input type="text" id="loginId" name="uid-kamitono-app" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="next" readonly>
     <label for="loginPassword">パスワード</label>
-    <input type="password" id="loginPassword" name="pw-kamitono-app" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="go" readonly>
+    <input type="text" id="loginPassword" name="pw-kamitono-app" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="go" readonly class="pw-masked">
     <button type="button" id="btnLogin">ログイン</button>
     <div class="login-error" id="loginError"></div>
   </div>
