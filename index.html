@@ -680,9 +680,9 @@ body.login-active {
     <h2>上殿浄化センター 週報</h2>
     <div class="subtitle">ログインしてください</div>
     <label for="loginId">ID</label>
-    <input type="text" id="loginId" name="uid-kamitono-app" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="next">
+    <input type="text" id="loginId" name="uid-kamitono-app" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="next" readonly>
     <label for="loginPassword">パスワード</label>
-    <input type="password" id="loginPassword" name="pw-kamitono-app" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="go">
+    <input type="password" id="loginPassword" name="pw-kamitono-app" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="go" readonly>
     <button type="button" id="btnLogin">ログイン</button>
     <div class="login-error" id="loginError"></div>
   </div>
@@ -3473,6 +3473,23 @@ function bindLoginEvents() {
   const idEl = document.getElementById('loginId');
   const pwEl = document.getElementById('loginPassword');
   const errEl = document.getElementById('loginError');
+
+  // Chromeの自動入力介入を防ぐため、初期は readonly にしておいて
+  // ユーザーがフォーカスした瞬間に readonly を外す
+  function unlockOnFocus(el) {
+    if (!el) return;
+    const handler = function() {
+      el.removeAttribute('readonly');
+      el.removeEventListener('focus', handler);
+      el.removeEventListener('click', handler);
+      el.removeEventListener('touchstart', handler);
+    };
+    el.addEventListener('focus', handler);
+    el.addEventListener('click', handler);
+    el.addEventListener('touchstart', handler, { passive: true });
+  }
+  unlockOnFocus(idEl);
+  unlockOnFocus(pwEl);
 
   async function tryLogin() {
     const uid = (idEl.value || '').trim();
