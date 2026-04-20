@@ -2078,6 +2078,31 @@ function updateDayTabs() {
 
 // ===== localStorage保存・読込 =====
 
+// ===== localStorage 容量対策 =====
+// 13ヶ月以上前の月データを削除して容量を確保
+function pruneOldMonthData(currentMonth) {
+  try {
+    if (!currentMonth || !/^\d{4}-\d{2}$/.test(currentMonth)) return 0;
+    var keepMonths = 13;
+    var curYear = parseInt(currentMonth.split("-")[0]);
+    var curMon = parseInt(currentMonth.split("-")[1]);
+    var deleted = 0;
+    var keysToDelete = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (!k || k.indexOf("uedono_weekly_") !== 0) continue;
+      var ym = k.replace("uedono_weekly_", "");
+      var m = ym.match(/^(\d{4})-(\d{2})$/);
+      if (!m) continue;
+      var y = parseInt(m[1]), mm = parseInt(m[2]);
+      var diff = (curYear - y) * 12 + (curMon - mm);
+      if (diff >= keepMonths) keysToDelete.push(k);
+    }
+    keysToDelete.forEach(function(k) { localStorage.removeItem(k); deleted++; });
+    return deleted;
+  } catch (e) { return 0; }
+}
+
 function saveToStorage() {
   function doSave() {
     if (currentSheet === "water") saveFormToData();
@@ -2090,10 +2115,10 @@ function saveToStorage() {
     localStorage.setItem(storageKey(), JSON.stringify(weeklyData));
     const inspEl = document.querySelector('[data-field="inspector"]');
     if (inspEl && inspEl.value) {
-      localStorage.setItem("uedono_last_inspector", inspEl.value);
+      try { localStorage.setItem("uedono_last_inspector", inspEl.value); } catch(e) {}
     }
     if (weeklyData.targetMonth) {
-      localStorage.setItem("uedono_current_month", weeklyData.targetMonth);
+      try { localStorage.setItem("uedono_current_month", weeklyData.targetMonth); } catch(e) {}
     }
   }
   function isQuotaError(e) {
@@ -2103,41 +2128,49 @@ function saveToStorage() {
       /quota/i.test(String(e.message || ''))
     );
   }
-  function cleanupOldKeys(keepMonth) {
-    const keepKey = 'uedono_weekly_' + (keepMonth || '');
-    const toRemove = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith('uedono_weekly_') && k !== keepKey) toRemove.push(k);
-    }
-    toRemove.forEach(k => localStorage.removeItem(k));
-    return toRemove.length;
-  }
 
   try {
     doSave();
     return true;
   } catch (e) {
-    if (isQuotaError(e)) {
-      // 他月の古いデータを削除して再試行
-      console.warn('localStorage quota exceeded — cleaning old month keys');
-      const cleared = cleanupOldKeys(weeklyData.targetMonth);
-      console.log('Cleared', cleared, 'old month keys');
-      try {
-        doSave();
-        if (typeof showToast === 'function') {
-          showToast("容量超過を検出 → 他月キャッシュ" + cleared + "件を削除して保存しました", "warn");
-        }
-        return true;
-      } catch (e2) {
-        console.error('saveToStorage retry failed:', e2);
+    if (!isQuotaError(e)) {
+      console.error('saveToStorage error:', e);
+      window.__lastSaveError = e;
+      return false;
+    }
+    // 段階1: 13ヶ月より古いデータを削除 + Undoスタッククリア
+    console.warn('localStorage quota exceeded - pruning old month data');
+    var pruned = pruneOldMonthData(weeklyData.targetMonth);
+    if (typeof undoStack !== "undefined" && undoStack.length) undoStack.length = 0;
+    try {
+      doSave();
+      console.log('Saved after pruning', pruned, 'old month keys');
+      return true;
+    } catch (e2) {
+      if (!isQuotaError(e2)) {
+        console.error('saveToStorage retry error:', e2);
         window.__lastSaveError = e2;
         return false;
       }
+      // 段階2: 他月のキーを古い順に1つずつ削除
+      var allKeys = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf('uedono_weekly_') === 0 && k !== storageKey()) allKeys.push(k);
+      }
+      allKeys.sort(); // 古い年月順（YYYY-MM 形式なので単純ソートで OK）
+      for (var j = 0; j < allKeys.length; j++) {
+        localStorage.removeItem(allKeys[j]);
+        try {
+          doSave();
+          console.warn('Saved after removing old keys:', allKeys.slice(0, j + 1));
+          return true;
+        } catch (e3) { /* 続けて削除 */ }
+      }
+      console.error('saveToStorage final failure: quota still exceeded');
+      window.__lastSaveError = e2;
+      return false;
     }
-    console.error('saveToStorage error:', e);
-    window.__lastSaveError = e;
-    return false;
   }
 }
 
