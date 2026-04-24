@@ -1844,6 +1844,16 @@ function buildElecTable() {
       }
     });
   });
+  // 電気タブの Enter ハンドラ（動的生成テーブル内のinput）
+  tbody.querySelectorAll('input[data-elec]').forEach(el => {
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        advanceToNextField(el);
+      }
+    });
+  });
 }
 
 function saveElecFormToData() {
@@ -1933,6 +1943,16 @@ function buildMechTable() {
       const week = weeklyData.mechanical[currentWeek];
       if (week && week[btn.dataset.mday]) {
         week[btn.dataset.mday][btn.dataset.mech] = newVal || null;
+      }
+    });
+  });
+  // 機械タブの Enter ハンドラ（動的生成テーブル内のinput）
+  tbody.querySelectorAll('input[data-mech]').forEach(el => {
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        advanceToNextField(el);
       }
     });
   });
@@ -2636,9 +2656,31 @@ function bindEvents() {
   buildElecTable();
   buildMechTable();
 
+  // 水質タブの Enter ハンドラ
+  document.querySelectorAll('#waterPanel input[data-field]').forEach(el => {
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        advanceToNextField(el);
+      }
+    });
+  });
+
   // 手動入力時にcopiedクラスを削除（機器運転時間）+ markDirty
   document.querySelectorAll("#equipTable [data-equip]").forEach(el => {
     el.addEventListener("input", () => { el.classList.remove("copied"); markDirty(); });
+  });
+
+  // 機器タブの Enter ハンドラ
+  document.querySelectorAll('#equipPanel input[data-equip]').forEach(el => {
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        advanceToNextField(el);
+      }
+    });
   });
   // 電気・機械はbuildElecTable/buildMechTable内のトグルボタンにも対応
   document.querySelectorAll("#elecTable [data-elec]").forEach(el => {
@@ -2966,7 +3008,7 @@ function bindEvents() {
     updateUndoBtn();
   });
 
-  // 全同期ボタン（全シートを順番に送信）
+  // 全同期ボタン（サーバーからダウンロードのみ）
   document.getElementById("btnSync").addEventListener("click", async () => {
     const btnSync = document.getElementById("btnSync");
 
@@ -2974,8 +3016,7 @@ function bindEvents() {
     if (typeof isDirty !== 'undefined' && isDirty) {
       const ok = confirm(
         '未保存のデータがあります。\n\n' +
-        '同期を行うと、現在の入力をサーバーに送信した後、サーバーの最新データで上書きします。\n' +
-        '送信前に問題があれば未保存分が失われる可能性があります。\n\n' +
+        '同期するとサーバーのデータで上書きされ、未保存分は失われる可能性があります。\n\n' +
         '続行しますか？\n\n' +
         '（中止 → 先に「保存」ボタンを押してから「同期」してください）'
       );
@@ -2983,53 +3024,36 @@ function bindEvents() {
     }
 
     btnSync.disabled = true;
-    saveToStorage();
+    btnSync.textContent = "取得中...";
 
-    const steps = [
-      { sheet: "water", label: "水質同期中..." },
-      { sheet: "equip", label: "機器同期中..." },
-      { sheet: "elec",  label: "電気同期中..." },
-      { sheet: "mech",  label: "機械同期中..." }
-    ];
-    let allOk = true;
-
-    for (const step of steps) {
-      btnSync.textContent = step.label;
-      try {
-        await saveSheetToServer(step.sheet);
-      } catch (e) {
-        allOk = false;
-        setConnectionStatus(false);
-        const msg = e && e.message ? e.message : String(e);
-        console.error(step.sheet + ' sync error:', e);
-        showToast(step.label.replace("中...", "失敗") + ": " + msg, "error");
-        break;
-      }
-    }
-
-    if (allOk) {
-      // サーバーから最新データも取得
-      btnSync.textContent = "取得中...";
-      try {
-        const summary = await syncFromServer();
-        setConnectionStatus(true);
+    try {
+      const summary = await syncFromServer();
+      if (summary && summary.merged) {
+        // 現在表示中のシートを再描画
+        if (currentSheet === "water") loadDataToForm();
+        else if (currentSheet === "equip") loadEquipDataToForm();
+        else if (currentSheet === "elec") loadElecDataToForm();
+        else if (currentSheet === "mech") loadMechDataToForm();
+        saveToStorage();
         markClean();
-        if (summary && summary.merged) {
-          const parts = [];
-          if (summary.water_days > 0) parts.push('水質' + summary.water_days + '日分');
-          if (summary.equipment_weeks > 0) parts.push('機器運転' + summary.equipment_weeks + '週分');
-          if (summary.electrical_days > 0) parts.push('電気' + summary.electrical_days + '日分');
-          if (summary.mechanical_days > 0) parts.push('機械' + summary.mechanical_days + '日分');
-          const detail = parts.length > 0 ? '（' + parts.join('、') + 'を更新）' : '';
-          showToast('全シートの同期が完了しました' + detail);
-        } else {
-          showToast('全シートの同期が完了しました（サーバーに新規データなし）');
-        }
-      } catch (e) {
-        setConnectionStatus(true);
-        markClean();
-        showToast("送信完了（サーバー取得はスキップ）", "warn");
+
+        // 詳細トースト生成
+        const parts = [];
+        if (summary.water_days > 0) parts.push('水質' + summary.water_days + '日分');
+        if (summary.equipment_weeks > 0) parts.push('機器' + summary.equipment_weeks + '週分');
+        if (summary.electrical_days > 0) parts.push('電気' + summary.electrical_days + '日分');
+        if (summary.mechanical_days > 0) parts.push('機械' + summary.mechanical_days + '日分');
+        const detail = parts.length > 0 ? '（' + parts.join('、') + 'を更新）' : '';
+        showToast('サーバーから最新データを取得しました' + detail);
+
+        // MLDO ステータス更新
+        if (typeof updateMldoStatus === 'function') updateMldoStatus();
+      } else {
+        showToast("サーバーにデータがありません", "warn");
       }
+    } catch (e) {
+      setConnectionStatus(false);
+      showToast("同期エラー: " + (e.message || e), "error");
     }
 
     btnSync.textContent = "同期";
@@ -3889,6 +3913,54 @@ function scrollToTopThird(el) {
   var targetY = viewportHeight / 3;
   var scrollBy = rect.top - targetY;
   window.scrollBy({ top: scrollBy, left: 0, behavior: 'smooth' });
+}
+
+// 次のフィールドを選ぶ（縦方向）
+// 現在のシートに応じてフィールドリストを生成
+function getAdvanceableFields() {
+  if (currentSheet === "water") {
+    return Array.from(document.querySelectorAll('#waterPanel input[data-field], #waterPanel button[data-field].toggle-btn'));
+  } else if (currentSheet === "equip") {
+    const result = [];
+    const days = ["mon", "tue", "wed", "thu", "fri"];
+    days.forEach(d => {
+      document.querySelectorAll('#equipPanel input[data-equip][data-eday="' + d + '"]').forEach(el => result.push(el));
+    });
+    return result;
+  } else if (currentSheet === "elec") {
+    const result = [];
+    const days = ["mon", "tue", "wed", "thu", "fri"];
+    days.forEach(d => {
+      document.querySelectorAll('#elecPanel input[data-elec][data-eday="' + d + '"], #elecPanel button[data-elec][data-eday="' + d + '"].toggle-btn').forEach(el => result.push(el));
+    });
+    return result;
+  } else if (currentSheet === "mech") {
+    const result = [];
+    const days = ["mon", "tue", "wed", "thu", "fri"];
+    days.forEach(d => {
+      document.querySelectorAll('#mechPanel input[data-mech][data-mday="' + d + '"], #mechPanel button[data-mech][data-mday="' + d + '"].toggle-btn').forEach(el => result.push(el));
+    });
+    return result;
+  }
+  return [];
+}
+
+// 次のフィールドに進む
+function advanceToNextField(currentEl) {
+  const fields = getAdvanceableFields();
+  const idx = fields.indexOf(currentEl);
+  if (idx < 0) return;
+
+  const next = fields[idx + 1];
+  if (next) {
+    next.focus();
+    setTimeout(() => scrollToTopThird(next), 50);
+    if (next.tagName === 'INPUT' && (next.type === 'number' || next.type === 'text')) {
+      try { next.select(); } catch(e) {}
+    }
+  } else {
+    currentEl.blur();
+  }
 }
 
 // inputタップ時に全選択＋スクロール＋記録
