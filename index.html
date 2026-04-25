@@ -1402,6 +1402,9 @@ const WEEKS = [1, 2, 3, 4, 5];
 
 // 機器運転時間の曜日キー（data-eday属性と一致）
 const EQUIP_DAYS = ["mon", "tue", "wed", "thu", "fri"];
+// 電気・機械タブのキー(fri) → 水質タブのキー(nextMon) への変換マップ
+// 水質タブは nextMon を金曜の意味で使っているため、両者を変換する必要がある
+const APP_KEY_MAP = { mon: "mon", tue: "tue", wed: "wed", thu: "thu", fri: "nextMon" };
 // 機器キー（data-equip属性と一致）
 const EQUIP_KEYS = [
   "screenUnit", "mainPump1", "mainPump2",
@@ -3660,7 +3663,6 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
 
     // ===== 各曜日データを書き込み =====
     // アプリ側のデータキー: mon, tue, wed, thu, nextMon（アプリ上は「金」ラベル）
-    const appKeyMap = { mon: "mon", tue: "tue", wed: "wed", thu: "thu", fri: "nextMon" };
     // 積算値テーブル(Row4-10)用の列マッピング: I列起点
     const DAY_COL_RUISAN = { mon: 9, tue: 10, wed: 11, thu: 12, fri: 13 };
     // 測定場所テーブル(Row14以降)用の列マッピング: J列起点（I列はラベル）
@@ -3671,7 +3673,7 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
     for (const dk in DAY_COL_RUISAN) {
       const colRuisan = DAY_COL_RUISAN[dk];
       const colMeasure = DAY_COL_MEASURE[dk];
-      const dataKey = appKeyMap[dk];
+      const dataKey = APP_KEY_MAP[dk];
       const day = weeklyData.weeks[w] && weeklyData.weeks[w][dataKey];
       if (!day) continue;
       for (const key in ITEM_OFFSETS) {
@@ -3689,7 +3691,7 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
     const bikouRow = dataRowBase + 32;
     for (const dk in DAY_COL_MEASURE) {
       const col = DAY_COL_MEASURE[dk];
-      const dataKey = appKeyMap[dk];
+      const dataKey = APP_KEY_MAP[dk];
       const day = weeklyData.weeks[w] && weeklyData.weeks[w][dataKey];
       if (day && day.bikou) {
         setCell(ws, bikouRow, col, day.bikou);
