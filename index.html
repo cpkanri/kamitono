@@ -96,6 +96,17 @@ header h1 {
   border-bottom-color: #0d4f34;
   background: #f8fcfa;
 }
+.week-tabs button .week-date {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: #999;
+  margin-top: 2px;
+  letter-spacing: 0;
+}
+.week-tabs button.active .week-date {
+  color: #4a8a6a;
+}
 
 /* ===== 日タブ ===== */
 .day-tabs {
@@ -1903,14 +1914,46 @@ function loadEquipDataToForm() {
   });
 }
 
+// 週タブ用の日付範囲文字列を返す（例: "4/28〜5/2"）
+function getWeekDateRangeStr(w) {
+  const mon = getActualDate(w, "mon");
+  const fri = getActualDate(w, "fri");
+  if (!mon || !fri) return "";
+  const fmt = d => (d.getMonth() + 1) + "/" + d.getDate();
+  return fmt(mon) + "〜" + fmt(fri);
+}
+
+// 週タブのラベルとパーセントを更新する共通処理
+function updateWeekTabLabel(btn, w, tabType) {
+  // ラベル部分（第〇週 + 日付）
+  let label = btn.querySelector(".week-label");
+  if (!label) {
+    label = document.createElement("span");
+    label.className = "week-label";
+    btn.insertBefore(label, btn.firstChild);
+  }
+  label.textContent = "第" + w + "週";
+
+  let dateSpan = btn.querySelector(".week-date");
+  if (!dateSpan) {
+    dateSpan = document.createElement("span");
+    dateSpan.className = "week-date";
+    label.after(dateSpan);
+  }
+  dateSpan.textContent = getWeekDateRangeStr(w);
+
+  // パーセント
+  let pct = btn.querySelector(".pct");
+  if (!pct) { pct = document.createElement("span"); pct.className = "pct"; btn.appendChild(pct); }
+  const p = getWeekPercent(tabType, w);
+  pct.textContent = p > 0 ? p + "%" : "";
+}
+
 function updateEquipWeekTabs() {
   document.querySelectorAll("#equipWeekTabs button").forEach(btn => {
     const w = Number(btn.dataset.week);
     btn.classList.toggle("active", w === currentWeek);
-    let pct = btn.querySelector(".pct");
-    if (!pct) { pct = document.createElement("span"); pct.className = "pct"; btn.appendChild(pct); }
-    const p = getWeekPercent("equip", w);
-    pct.textContent = p > 0 ? p + "%" : "";
+    updateWeekTabLabel(btn, w, "equip");
   });
 }
 
@@ -2024,10 +2067,7 @@ function updateElecWeekTabs() {
   document.querySelectorAll("#elecWeekTabs button").forEach(btn => {
     const w = Number(btn.dataset.week);
     btn.classList.toggle("active", w === currentWeek);
-    let pct = btn.querySelector(".pct");
-    if (!pct) { pct = document.createElement("span"); pct.className = "pct"; btn.appendChild(pct); }
-    const p = getWeekPercent("elec", w);
-    pct.textContent = p > 0 ? p + "%" : "";
+    updateWeekTabLabel(btn, w, "elec");
   });
 }
 
@@ -2124,10 +2164,7 @@ function updateMechWeekTabs() {
   document.querySelectorAll("#mechWeekTabs button").forEach(btn => {
     const w = Number(btn.dataset.week);
     btn.classList.toggle("active", w === currentWeek);
-    let pct = btn.querySelector(".pct");
-    if (!pct) { pct = document.createElement("span"); pct.className = "pct"; btn.appendChild(pct); }
-    const p = getWeekPercent("mech", w);
-    pct.textContent = p > 0 ? p + "%" : "";
+    updateWeekTabLabel(btn, w, "mech");
   });
 }
 
