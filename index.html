@@ -355,13 +355,13 @@ header h1 {
 }
 .equip-table {
   width: 100%;
-  min-width: 420px;
+  table-layout: fixed;
   border-collapse: collapse;
   background: #fff;
   border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-  font-size: 13px;
+  font-size: 12px;
 }
 .equip-table thead th {
   background: #eef5f1;
@@ -377,7 +377,10 @@ header h1 {
 .equip-table thead th:first-child {
   text-align: left;
   padding-left: 10px;
-  min-width: 120px;
+  width: 28%;
+}
+.equip-table thead th:not(:first-child) {
+  width: 14.4%;
 }
 .equip-table tbody td {
   padding: 4px;
@@ -390,20 +393,25 @@ header h1 {
   font-size: 12px;
   color: #333;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .equip-table tbody tr:last-child td { border-bottom: none; }
-.equip-table input[type="number"] {
-  width: 64px;
-  height: 44px;
-  padding: 6px 4px;
+.equip-table input[type="number"],
+.equip-table input[type="text"] {
+  width: 100%;
+  height: 38px;
+  padding: 4px 2px;
   border: 1px solid #ccd;
   border-radius: 6px;
-  font-size: 16px;
+  font-size: 15px;
   text-align: right;
   font-family: inherit;
   background: #fafbfc;
+  box-sizing: border-box;
 }
-.equip-table input[type="number"]:focus {
+.equip-table input[type="number"]:focus,
+.equip-table input[type="text"]:focus {
   outline: none;
   border-color: #0d4f34;
   background: #fff;
@@ -1419,7 +1427,7 @@ const ELEC_SECTIONS = [
   { title: "放流流量計", fields: [
     { key: "flowLook", label: "外観の確認", type: "toggle", options: ["○","△","×"] },
     { key: "flowStatus", label: "指示状況の確認", type: "toggle", options: ["○","△","×"] },
-    { key: "flowReading", label: "流量計の読み", type: "number", step: "0.01", unit: "㎥/h" },
+    { key: "flowReading", label: "流量計の読み", type: "text", inputmode: "decimal", placeholder: "-", unit: "㎥/h" },
   ]},
   { title: "汚濁負荷量計(放流水UV)", fields: [
     { key: "uvLook", label: "外観の確認", type: "toggle", options: ["○","△","×"] },
@@ -1430,13 +1438,13 @@ const ELEC_SECTIONS = [
   { title: "全窒素・全燐計", fields: [
     { key: "tnLook", label: "外観の確認", type: "toggle", options: ["○","△","×"] },
     { key: "tnStatus", label: "指示状況の確認", type: "toggle", options: ["○","△","×"] },
-    { key: "tnReading", label: "全窒素", type: "number", step: "0.01", unit: "mg/L" },
-    { key: "tpReading", label: "全りん", type: "number", step: "0.001", unit: "mg/L" },
+    { key: "tnReading", label: "全窒素", type: "text", inputmode: "decimal", placeholder: "-", unit: "mg/L" },
+    { key: "tpReading", label: "全りん", type: "text", inputmode: "decimal", placeholder: "-", unit: "mg/L" },
   ]},
   { title: "圧力式液位計", fields: [
     { key: "pressureLook", label: "外観の確認", type: "toggle", options: ["○","△","×"] },
     { key: "pressureStatus", label: "指示状況の確認", type: "toggle", options: ["○","△","×"] },
-    { key: "pressureReading", label: "機器指示値", type: "number", step: "0.01", unit: "m" },
+    { key: "pressureReading", label: "機器指示値", type: "text", inputmode: "decimal", placeholder: "-", unit: "m" },
   ]},
   { title: "発電機設備", fields: [
     { key: "generatorLook", label: "発電機盤 外観", type: "toggle", options: ["○","△","×"] },
@@ -1988,12 +1996,21 @@ function saveElecFormToData() {
 
 function loadElecDataToForm() {
   const week = weeklyData.electrical[currentWeek];
+  const dashFields = ["flowReading", "tnReading", "tpReading", "pressureReading"];
   document.querySelectorAll("[data-elec]").forEach(el => {
     const key = el.dataset.elec;
     const day = el.dataset.eday;
     const v = (week && week[day]) ? week[day][key] : null;
     if (el.tagName === "INPUT") {
-      el.value = (v === null || v === undefined) ? "" : v;
+      if (v === null || v === undefined || v === "") {
+        if (el.type === "text" && dashFields.indexOf(key) >= 0) {
+          el.value = "-";
+        } else {
+          el.value = "";
+        }
+      } else {
+        el.value = v;
+      }
     } else {
       // toggle button
       const val = (v === null || v === undefined) ? "" : String(v);
@@ -3505,6 +3522,55 @@ async function exportExcel() {
 
 // 日常水質シート（週オフセット: 1→0, 2→46, 3→92, 4→138, 5→184）
 // テンプレ配置: I列=月曜, J列=火曜, K列=水曜, L列=木曜, M列=金曜, N列=次週の最初の平日（祝日除く）
+// ===== 前月最終点検日のデータを取得するヘルパー =====
+function getPrevMonthLastDayData(targetMonth, firstMonday, holidaySet) {
+  if (!firstMonday || !targetMonth) return null;
+  const ym = targetMonth.split("-");
+  const year = parseInt(ym[0], 10);
+  const month = parseInt(ym[1], 10);
+  if (isNaN(year) || isNaN(month)) return null;
+  const prevMonth = month === 1 ? (year - 1) + "-12" : year + "-" + String(month - 1).padStart(2, "0");
+
+  let rawPrev = null;
+  try { rawPrev = localStorage.getItem("kamitono_weekly_" + prevMonth); } catch(e) { return null; }
+  if (!rawPrev) return null;
+  let prevWeekly;
+  try { prevWeekly = JSON.parse(rawPrev); } catch(e) { return null; }
+  if (!prevWeekly || !prevWeekly.weeks || !prevWeekly.startDate) return null;
+
+  const candidates = [];
+  const prevBase = new Date(prevWeekly.startDate + "T00:00:00");
+  if (isNaN(prevBase.getTime())) return null;
+
+  const dayOffsetMap = { mon: 0, tue: 1, wed: 2, thu: 3, nextMon: 4 };
+  for (let wk = 1; wk <= 5; wk++) {
+    const wkData = prevWeekly.weeks[wk];
+    if (!wkData) continue;
+    ["mon", "tue", "wed", "thu", "nextMon"].forEach(dk => {
+      const dd = wkData[dk];
+      if (!dd) return;
+      const offsetDays = (wk - 1) * 7 + dayOffsetMap[dk];
+      const d = new Date(prevBase);
+      d.setDate(prevBase.getDate() + offsetDays);
+      candidates.push({ date: d, data: dd });
+    });
+  }
+
+  for (let back = 1; back <= 14; back++) {
+    const target = new Date(firstMonday.getFullYear(), firstMonday.getMonth(), firstMonday.getDate() - back);
+    const dow = target.getDay();
+    if (dow === 0 || dow === 6) continue;
+    const ymd = dateToStr(target);
+    if (holidaySet.has(ymd)) continue;
+    for (let ci = 0; ci < candidates.length; ci++) {
+      if (dateToStr(candidates[ci].date) === ymd) {
+        return { date: target, data: candidates[ci].data };
+      }
+    }
+  }
+  return null;
+}
+
 function fillWaterSheet(ws, yyyy, mm, holidaySet) {
   holidaySet = holidaySet || new Set();
   const WEEK_OFFSETS = { 1: 0, 2: 46, 3: 92, 4: 138, 5: 184 };
@@ -3524,6 +3590,25 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
   const DATA_ROW_BASE = 4;
   const DATE_ROW_BASE = 3;
   const INSP_ROW_BASE = 13;
+
+  // ===== 第1週I列: 前月最終点検日のデータを書き込む =====
+  // （第2週以降のI列はテンプレート数式 =N49 等で自動参照される）
+  const firstMondayDate = getActualDate(1, "mon");
+  if (firstMondayDate) {
+    const prevLast = getPrevMonthLastDayData(weeklyData.targetMonth, firstMondayDate, holidaySet);
+    const RUISAN_KEYS_I = ["power200v", "power100v", "water", "diesel", "returnSludge", "excessSludge", "discharge"];
+    if (prevLast) {
+      const cell = ws.getCell(DATE_ROW_BASE, 9);
+      cell.value = toExcelDate(prevLast.date);
+      cell.numFmt = 'm"月"d"日("aaa")"';
+      RUISAN_KEYS_I.forEach((key, i) => {
+        ws.getCell(DATA_ROW_BASE + i, 9).value = prevLast.data[key] !== undefined ? prevLast.data[key] : null;
+      });
+    } else {
+      ws.getCell(DATE_ROW_BASE, 9).value = null;
+      for (let r = 0; r < 7; r++) ws.getCell(DATA_ROW_BASE + r, 9).value = null;
+    }
+  }
 
   for (let w = 1; w <= 5; w++) {
     const offset = WEEK_OFFSETS[w];
