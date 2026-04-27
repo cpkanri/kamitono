@@ -1,12 +1,14 @@
 // 上殿浄化センター 週報 Service Worker
-const CACHE_NAME = 'kamitono-v33';
+const CACHE_NAME = 'kamitono-v34';
 const ASSETS = [
   './',
   './index.html',
   './template.js',
   './manifest.json',
-  './icon-192.png',
-  './icon-512.png'
+  './kamitono_icon_180.png',
+  './kamitono_icon_192.png',
+  './kamitono_icon_512.png',
+  './kamitono_maskable_512.png'
 ];
 
 self.addEventListener('install', (event) => {
