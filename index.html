@@ -1888,6 +1888,79 @@ function getActualDate(weekIdx, dayKey) {
   return d;
 }
 
+// Date を "YYYY-MM-DD" 文字列に整形（GAS送信用）
+function formatYMD(d) {
+  if (!d || isNaN(d.getTime())) return "";
+  return d.getFullYear() + "-" +
+    String(d.getMonth() + 1).padStart(2, "0") + "-" +
+    String(d.getDate()).padStart(2, "0");
+}
+
+// 1週分の日常水質オブジェクト({mon:{...}, tue:{...},...}) に
+// 自動算出した YYYY-MM-DD 日付を注入（保存リクエスト直前に呼ぶ）。
+// 画面では金曜のキーを "nextMon" として保持しているため両方を対象にする。
+function injectComputedDates(weekDays, weekIdx) {
+  if (!weekDays) return;
+  ['mon','tue','wed','thu','fri','nextMon'].forEach(dc => {
+    if (!weekDays[dc]) return;
+    const ymd = formatYMD(getActualDate(weekIdx, dc));
+    if (ymd) weekDays[dc].date = ymd;
+  });
+}
+
+// 現在のシート＋週がすべて空（null/空文字のみ）かどうかを判定
+function isCurrentScopeEmpty() {
+  if (currentSheet === "water") {
+    const week = weeklyData.weeks[currentWeek];
+    if (!week) return true;
+    return DAYS.every(d => {
+      const day = week[d];
+      if (!day) return true;
+      return ALL_FIELDS.every(k => {
+        const v = day[k];
+        return v === null || v === undefined || v === "";
+      });
+    });
+  }
+  if (currentSheet === "equip") {
+    const week = weeklyData.equipment[currentWeek];
+    if (!week) return true;
+    return EQUIP_KEYS.every(k => {
+      const row = week[k];
+      if (!row) return true;
+      return EQUIP_DAYS.every(d => {
+        const v = row[d];
+        return v === null || v === undefined || v === "";
+      });
+    });
+  }
+  if (currentSheet === "elec") {
+    const week = weeklyData.electrical[currentWeek];
+    if (!week) return true;
+    return EQUIP_DAYS.every(d => {
+      const day = week[d];
+      if (!day) return true;
+      return ALL_ELEC_KEYS.every(k => {
+        const v = day[k];
+        return v === null || v === undefined || v === "";
+      });
+    });
+  }
+  if (currentSheet === "mech") {
+    const week = weeklyData.mechanical[currentWeek];
+    if (!week) return true;
+    return MECH_DAYS.every(d => {
+      const day = week[d];
+      if (!day) return true;
+      return ALL_MECH_KEYS.every(k => {
+        const v = day[k];
+        return v === null || v === undefined || v === "";
+      });
+    });
+  }
+  return false;
+}
+
 // ===== 機器運転時間フォーム <-> データ =====
 
 function saveEquipFormToData() {
@@ -2424,6 +2497,9 @@ async function fetchWithTimeout(url, options, timeoutMs) {
 async function saveCurrentToServer() {
   let payload;
   if (currentSheet === "water") {
+    // startDate と各曜日の日付(YYYY-MM-DD)を自動算出して注入
+    if (!weeklyData.startDate) weeklyData.startDate = estimateStartDate(weeklyData.targetMonth);
+    injectComputedDates(weeklyData.weeks[currentWeek], currentWeek);
     payload = {
       action: 'saveWeek',
       month: weeklyData.targetMonth,
@@ -2478,6 +2554,11 @@ async function saveCurrentToServer() {
 async function saveSheetToServer(sheetType) {
   let payload;
   if (sheetType === "water") {
+    if (!weeklyData.startDate) weeklyData.startDate = estimateStartDate(weeklyData.targetMonth);
+    // 全週の各曜日に YYYY-MM-DD を自動注入
+    Object.keys(weeklyData.weeks || {}).forEach(w => {
+      injectComputedDates(weeklyData.weeks[w], parseInt(w, 10));
+    });
     payload = { action: 'saveAll', month: weeklyData.targetMonth, startDate: weeklyData.startDate, weeks: weeklyData.weeks };
   } else if (sheetType === "equip") {
     payload = { action: 'saveEquipment', month: weeklyData.targetMonth, equipment: weeklyData.equipment };
@@ -2532,24 +2613,36 @@ const EQUIP_NAME_TO_KEY = {
 const DAY_JP_TO_CODE = { "月": "mon", "火": "tue", "水": "wed", "木": "thu", "金": "fri" };
 
 // サーバーデータをマージ
+// GAS getAllData は water/equipment/electrical/mechanical を「フラット配列」で返す:
+//   water:      [{week, day, date, ...fields, updatedAt}, ...]   day は日本語"月火水木金"
+//   equipment:  [{week, name, mon, tue, wed, thu, fri}, ...]      name は日本語ラベル
+//   electrical: [{week, day, ...fields}, ...]
+//   mechanical: [{week, day, data:{...}}, ...]
+// 振り分けのキーは week + day で行い、date が空でも転記処理を継続する。
 function mergeServerData(serverData) {
   const summary = { water_days: 0, equipment_weeks: 0, electrical_days: 0, mechanical_days: 0, merged: false };
   if (!serverData) return summary;
 
   // water (日常水質)
-  if (serverData.water && typeof serverData.water === "object") {
-    Object.keys(serverData.water).forEach(w => {
+  if (Array.isArray(serverData.water)) {
+    serverData.water.forEach(rec => {
+      if (!rec) return;
+      const w = rec.week;
+      const dayCode = DAY_JP_TO_CODE[rec.day] || rec.day;
+      if (!w || !dayCode) return;
       if (!weeklyData.weeks[w]) weeklyData.weeks[w] = emptyWeek();
-      const wData = serverData.water[w];
-      if (wData && typeof wData === "object") {
-        Object.keys(wData).forEach(d => {
-          const dayCode = DAY_JP_TO_CODE[d] || d;
-          if (weeklyData.weeks[w][dayCode]) {
-            Object.assign(weeklyData.weeks[w][dayCode], wData[d]);
-            summary.water_days++;
-          }
-        });
-      }
+      if (!weeklyData.weeks[w][dayCode]) return;
+      const target = weeklyData.weeks[w][dayCode];
+      Object.keys(rec).forEach(k => {
+        if (k === 'week' || k === 'day' || k === 'updatedAt') return;
+        if (k === 'date') {
+          // date が空文字でも他フィールドの転記は継続。空で既存日付を上書きはしない
+          if (rec.date) target.date = rec.date;
+          return;
+        }
+        target[k] = rec[k];
+      });
+      summary.water_days++;
     });
     summary.merged = true;
   }
@@ -2559,66 +2652,58 @@ function mergeServerData(serverData) {
     summary.merged = true;
   }
 
-  // equipment (機器運転時間)
-  if (serverData.equipment && typeof serverData.equipment === "object") {
-    Object.keys(serverData.equipment).forEach(w => {
+  // equipment (機器運転時間) — name は日本語ラベル、mon..fri に値
+  if (Array.isArray(serverData.equipment)) {
+    serverData.equipment.forEach(rec => {
+      if (!rec) return;
+      const w = rec.week;
+      const key = EQUIP_NAME_TO_KEY[rec.name] || rec.name;
+      if (!w || !key) return;
       if (!weeklyData.equipment[w]) weeklyData.equipment[w] = emptyEquipWeek();
-      const wData = serverData.equipment[w];
-      if (wData && typeof wData === "object") {
-        let weekMerged = false;
-        Object.keys(wData).forEach(nameOrKey => {
-          const key = EQUIP_NAME_TO_KEY[nameOrKey] || nameOrKey;
-          if (weeklyData.equipment[w][key]) {
-            const dayData = wData[nameOrKey];
-            if (dayData && typeof dayData === "object") {
-              Object.keys(dayData).forEach(d => {
-                const dayCode = DAY_JP_TO_CODE[d] || d;
-                if (dayCode in weeklyData.equipment[w][key]) {
-                  weeklyData.equipment[w][key][dayCode] = dayData[d];
-                  weekMerged = true;
-                }
-              });
-            }
-          }
-        });
-        if (weekMerged) summary.equipment_weeks++;
-      }
+      if (!weeklyData.equipment[w][key]) return;
+      EQUIP_DAYS.forEach(d => {
+        const v = rec[d];
+        if (v !== undefined && v !== null && v !== '') {
+          weeklyData.equipment[w][key][d] = v;
+        }
+      });
+      summary.equipment_weeks++;
     });
     summary.merged = true;
   }
 
   // electrical (電気設備)
-  if (serverData.electrical && typeof serverData.electrical === "object") {
-    Object.keys(serverData.electrical).forEach(w => {
+  if (Array.isArray(serverData.electrical)) {
+    serverData.electrical.forEach(rec => {
+      if (!rec) return;
+      const w = rec.week;
+      const dayCode = DAY_JP_TO_CODE[rec.day] || rec.day;
+      if (!w || !dayCode) return;
       if (!weeklyData.electrical[w]) weeklyData.electrical[w] = emptyElecWeek();
-      const wData = serverData.electrical[w];
-      if (wData && typeof wData === "object") {
-        Object.keys(wData).forEach(d => {
-          const dayCode = DAY_JP_TO_CODE[d] || d;
-          if (weeklyData.electrical[w][dayCode] && typeof wData[d] === "object") {
-            Object.assign(weeklyData.electrical[w][dayCode], wData[d]);
-            summary.electrical_days++;
-          }
-        });
-      }
+      if (!weeklyData.electrical[w][dayCode]) return;
+      const target = weeklyData.electrical[w][dayCode];
+      Object.keys(rec).forEach(k => {
+        if (k === 'week' || k === 'day') return;
+        target[k] = rec[k];
+      });
+      summary.electrical_days++;
     });
     summary.merged = true;
   }
 
-  // mechanical (機械設備)
-  if (serverData.mechanical && typeof serverData.mechanical === "object") {
-    Object.keys(serverData.mechanical).forEach(w => {
+  // mechanical (機械設備) — data に JSON が入っている
+  if (Array.isArray(serverData.mechanical)) {
+    serverData.mechanical.forEach(rec => {
+      if (!rec) return;
+      const w = rec.week;
+      const dayCode = DAY_JP_TO_CODE[rec.day] || rec.day;
+      if (!w || !dayCode) return;
       if (!weeklyData.mechanical[w]) weeklyData.mechanical[w] = emptyMechWeek();
-      const wData = serverData.mechanical[w];
-      if (wData && typeof wData === "object") {
-        Object.keys(wData).forEach(d => {
-          const dayCode = DAY_JP_TO_CODE[d] || d;
-          if (weeklyData.mechanical[w][dayCode] && typeof wData[d] === "object") {
-            Object.assign(weeklyData.mechanical[w][dayCode], wData[d]);
-            summary.mechanical_days++;
-          }
-        });
+      if (!weeklyData.mechanical[w][dayCode]) return;
+      if (rec.data && typeof rec.data === 'object') {
+        Object.assign(weeklyData.mechanical[w][dayCode], rec.data);
       }
+      summary.mechanical_days++;
     });
     summary.merged = true;
   }
@@ -3125,6 +3210,12 @@ function bindEvents() {
       const err = window.__lastSaveError;
       const msg = err ? (err.name + ": " + (err.message || String(err))) : "不明なエラー";
       showToast("保存に失敗しました — " + msg, "error");
+      return;
+    }
+
+    // a-2. 空データ保存の事故防止：現在のシート+週がすべて空なら中止
+    if (isCurrentScopeEmpty()) {
+      alert('入力データがありません。\n保存を中止しました（既存データの誤上書き防止のため）。');
       return;
     }
 
