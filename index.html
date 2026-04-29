@@ -904,6 +904,16 @@ header > .conn-status {
 <!-- 入力フォーム（static HTML） -->
 <div class="form-wrap">
 
+  <!-- セクション0: 測定者（最上部に移動） -->
+  <div class="section">
+    <div class="section-header">測定者</div>
+    <div class="field">
+      <span class="label">測定者名</span>
+      <span class="unit"></span>
+      <input type="text" data-field="inspector">
+    </div>
+  </div>
+
   <!-- セクション1: 積算値・流量 -->
   <div class="section">
     <div class="section-header">積算値・流量</div>
@@ -1056,16 +1066,6 @@ header > .conn-status {
       <span class="label">残留塩素(放流水)</span>
       <span class="unit">mg/L</span>
       <input type="number" inputmode="decimal" step="0.1" data-field="chlorine">
-    </div>
-  </div>
-
-  <!-- セクション7: 測定者 -->
-  <div class="section">
-    <div class="section-header">測定者</div>
-    <div class="field">
-      <span class="label">測定者名</span>
-      <span class="unit"></span>
-      <input type="text" data-field="inspector">
     </div>
   </div>
 
@@ -2323,13 +2323,14 @@ function saveFormToData() {
   });
 }
 
-function loadDataToForm() {
+function loadDataToForm(skipInspectorAutofill) {
   const day = weeklyData.weeks[currentWeek][currentDay];
   document.querySelectorAll("[data-field]").forEach(el => {
     const key = el.dataset.field;
     const v = day[key];
     el.value = (v === null || v === undefined) ? "" : v;
   });
+  if (skipInspectorAutofill) return;
   const inspEl = document.querySelector('[data-field="inspector"]');
   if (inspEl && !inspEl.value) {
     const last = localStorage.getItem("uedono_last_inspector") || "";
@@ -3190,7 +3191,8 @@ function bindEvents() {
       const label = "第" + currentWeek + "週 " + DAY_LABELS[currentDay] + " の日常水質";
       if (!confirm(label + " データをクリアしますか？")) return;
       weeklyData.weeks[currentWeek][currentDay] = emptyDay();
-      loadDataToForm();
+      // 測定者の自動復元(uedono_last_inspector)は抑制してフォームを空にする
+      loadDataToForm(true);
       updateDayTabs();
       showToast(label + " をクリアしました");
     } else {
