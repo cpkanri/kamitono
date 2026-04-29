@@ -2050,6 +2050,11 @@ function buildElecTable() {
       EQUIP_DAYS.forEach(d => {
         if (f.type === "number") {
           html += '<td><input type="number" inputmode="decimal" step="' + f.step + '" data-elec="' + f.key + '" data-eday="' + d + '"></td>';
+        } else if (f.type === "text") {
+          // 自由文字入力（流量計の読み・全窒素・全燐・圧力など、"-" や数値どちらも許容）
+          const im = f.inputmode || "text";
+          const ph = f.placeholder || "";
+          html += '<td><input type="text" inputmode="' + im + '" placeholder="' + ph + '" data-elec="' + f.key + '" data-eday="' + d + '"></td>';
         } else {
           // toggle button
           html += '<td><button type="button" class="toggle-btn" data-elec="' + f.key + '" data-eday="' + d + '" data-options=\'' + JSON.stringify(f.options) + '\'></button></td>';
