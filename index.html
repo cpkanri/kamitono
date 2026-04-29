@@ -2323,22 +2323,13 @@ function saveFormToData() {
   });
 }
 
-function loadDataToForm(skipInspectorAutofill) {
+function loadDataToForm() {
   const day = weeklyData.weeks[currentWeek][currentDay];
   document.querySelectorAll("[data-field]").forEach(el => {
     const key = el.dataset.field;
     const v = day[key];
     el.value = (v === null || v === undefined) ? "" : v;
   });
-  if (skipInspectorAutofill) return;
-  const inspEl = document.querySelector('[data-field="inspector"]');
-  if (inspEl && !inspEl.value) {
-    const last = localStorage.getItem("uedono_last_inspector") || "";
-    if (last) {
-      inspEl.value = last;
-      day.inspector = last;
-    }
-  }
 }
 
 // ===== タブ更新 =====
@@ -2406,10 +2397,6 @@ function saveToStorage() {
     // startDate はinput値ではなく対象月から常に再計算（readonly のため）
     weeklyData.startDate = estimateStartDate(weeklyData.targetMonth);
     localStorage.setItem(storageKey(), JSON.stringify(weeklyData));
-    const inspEl = document.querySelector('[data-field="inspector"]');
-    if (inspEl && inspEl.value) {
-      try { localStorage.setItem("uedono_last_inspector", inspEl.value); } catch(e) {}
-    }
     if (weeklyData.targetMonth) {
       try { localStorage.setItem("uedono_current_month", weeklyData.targetMonth); } catch(e) {}
     }
@@ -3191,8 +3178,11 @@ function bindEvents() {
       const label = "第" + currentWeek + "週 " + DAY_LABELS[currentDay] + " の日常水質";
       if (!confirm(label + " データをクリアしますか？")) return;
       weeklyData.weeks[currentWeek][currentDay] = emptyDay();
-      // 測定者の自動復元(uedono_last_inspector)は抑制してフォームを空にする
-      loadDataToForm(true);
+      // 先に DOM を空状態へ同期 → そのあと localStorage へ永続化。
+      // saveToStorage は内部で saveFormToData(DOM→state) を呼ぶので、
+      // 順序を逆にすると古い DOM 値で state が再汚染されてしまう。
+      loadDataToForm();
+      saveToStorage();
       updateDayTabs();
       showToast(label + " をクリアしました");
     } else {
