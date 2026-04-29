@@ -1697,38 +1697,60 @@ function ensureWeeklyStructure() {
   if (!weeklyData.mechanical || typeof weeklyData.mechanical !== "object") weeklyData.mechanical = {};
   WEEKS.forEach(w => {
     // 日常水質
+    // 防御: 各曜日が独立したオブジェクトであることを保証する。
+    // 過去のバグや古い localStorage 由来で複数の曜日が同じオブジェクトを
+    // 参照している場合、片方への書き込みが他方にも漏れてしまうため、
+    // 各曜日を浅いコピー(全フィールドはプリミティブ)で再生成する。
     if (!weeklyData.weeks[w]) weeklyData.weeks[w] = emptyWeek();
     DAYS.forEach(d => {
-      if (!weeklyData.weeks[w][d]) weeklyData.weeks[w][d] = emptyDay();
+      const existing = weeklyData.weeks[w][d];
+      if (!existing) {
+        weeklyData.weeks[w][d] = emptyDay();
+      } else {
+        weeklyData.weeks[w][d] = Object.assign({}, existing);
+      }
       ALL_FIELDS.forEach(k => {
         if (!(k in weeklyData.weeks[w][d])) {
           weeklyData.weeks[w][d][k] = (k === "inspector") ? "" : null;
         }
       });
     });
-    // 機器運転時間
+    // 機器運転時間（同様に各機器行を独立化）
     if (!weeklyData.equipment[w]) weeklyData.equipment[w] = emptyEquipWeek();
     EQUIP_KEYS.forEach(k => {
-      if (!weeklyData.equipment[w][k]) {
+      const existing = weeklyData.equipment[w][k];
+      if (!existing) {
         weeklyData.equipment[w][k] = {};
         EQUIP_DAYS.forEach(d => { weeklyData.equipment[w][k][d] = null; });
+      } else {
+        weeklyData.equipment[w][k] = Object.assign({}, existing);
       }
       EQUIP_DAYS.forEach(d => {
         if (!(d in weeklyData.equipment[w][k])) weeklyData.equipment[w][k][d] = null;
       });
     });
-    // 電気設備
+    // 電気設備（曜日オブジェクトを独立化）
     if (!weeklyData.electrical[w]) weeklyData.electrical[w] = emptyElecWeek();
     EQUIP_DAYS.forEach(d => {
-      if (!weeklyData.electrical[w][d]) weeklyData.electrical[w][d] = emptyElecDay();
+      const existing = weeklyData.electrical[w][d];
+      if (!existing) {
+        weeklyData.electrical[w][d] = emptyElecDay();
+      } else {
+        weeklyData.electrical[w][d] = Object.assign({}, existing);
+      }
       ALL_ELEC_KEYS.forEach(k => {
         if (!(k in weeklyData.electrical[w][d])) weeklyData.electrical[w][d][k] = null;
       });
     });
-    // 機械設備
+    // 機械設備（曜日オブジェクトを独立化）
     if (!weeklyData.mechanical[w]) weeklyData.mechanical[w] = emptyMechWeek();
     MECH_DAYS.forEach(d => {
-      if (!weeklyData.mechanical[w][d]) weeklyData.mechanical[w][d] = emptyMechDay();
+      const existing = weeklyData.mechanical[w][d];
+      if (!existing) {
+        weeklyData.mechanical[w][d] = emptyMechDay();
+      } else {
+        weeklyData.mechanical[w][d] = Object.assign({}, existing);
+      }
       ALL_MECH_KEYS.forEach(k => {
         if (!(k in weeklyData.mechanical[w][d])) weeklyData.mechanical[w][d][k] = null;
       });
