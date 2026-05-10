@@ -768,17 +768,22 @@ header .user-info {
 }
 
 /* ヘッダーアクションボタン横一列 */
+/* Phase 11-F-CSS-2: 4 ボタン (更新/同期/履歴/Excel) を 1 行に収めるため 4 列に */
 .header-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
   gap: 8px;
   margin-top: 12px;
 }
 /* Phase 11-F-CSS: 吉和/筒賀 (.sync-btn 系) 基準に値を統一 */
+/* Phase 11-F-CSS-2: width:100% + justify-content:center で 4 ボタンの幅・テキスト位置を統一 */
 .btn-header-action {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
   padding: 4px 10px;
   background: rgba(255,255,255,0.15);
   color: white;
@@ -813,12 +818,10 @@ header > .conn-status {
 }
 
 /* スマホ対応: 狭い画面でヘッダーアクションを縦並びに */
+/* Phase 11-F-CSS-2: 4 ボタン構成のため 2 列 × 2 行で折り返す。Excel ボタンの span は不要 */
 @media (max-width: 480px) {
   .header-actions {
     grid-template-columns: 1fr 1fr;
-  }
-  .btn-header-action.btn-excel-header {
-    grid-column: span 2;
   }
   .header-top {
     flex-direction: column;
@@ -871,8 +874,9 @@ header > .conn-status {
     </label>
   </div>
   <div class="header-actions">
-    <button type="button" class="btn-header-action" id="btnForceRefresh" title="アプリを最新版に更新">⟳ 更新</button>
-    <button type="button" class="btn-header-action" id="btnSyncHeader">同期</button>
+    <!-- Phase 11-F-CSS-2: 更新ボタンに 🔄、同期ボタンに 🔃 アイコン追加（他ボタンと統一） -->
+    <button type="button" class="btn-header-action" id="btnForceRefresh" title="アプリを最新版に更新">🔄 更新</button>
+    <button type="button" class="btn-header-action" id="btnSyncHeader">🔃 同期</button>
     <!-- B-6 (Phase 11-F): 保存履歴ボタン（吉和からバックポート） -->
     <button type="button" class="btn-header-action btn-history-header" id="btnHistory" title="保存履歴を表示">📋 履歴</button>
     <button type="button" class="btn-header-action btn-excel-header" id="btnExcelHeader">📄 Excel出力</button>
