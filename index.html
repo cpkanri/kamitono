@@ -4027,6 +4027,17 @@ async function exportExcel() {
     }
   } catch (e) { console.error("Daily dates fill:", e); }
 
+  // Phase 13d-fix: ExcelJS 4.4 の writeBuffer で
+  // 「Cannot read properties of undefined (reading 'comments')」が発生する既知問題への対処。
+  // Phase 13d で運転管理月報テンプレに集計行を追加した際、ExcelJS 側の内部状態で
+  // worksheet._comments が undefined のまま残ることがあり、コメントXFormの prepare/write で落ちる。
+  // 全シートの _comments を空配列で初期化することで防御。
+  try {
+    wb.eachSheet((ws) => {
+      if (!ws._comments) ws._comments = [];
+    });
+  } catch (e) { console.warn("Workbook comments guard:", e); }
+
   const out = await wb.xlsx.writeBuffer();
   const blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const url = URL.createObjectURL(blob);
