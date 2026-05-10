@@ -3678,6 +3678,13 @@ async function exportExcel() {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf);
 
+  // Excel 開封時の強制再計算（年月ラベルの数式参照セルが確実に更新されるため）
+  if (wb.calcProperties) {
+    wb.calcProperties.fullCalcOnLoad = true;
+  } else {
+    wb.calcProperties = { fullCalcOnLoad: true };
+  }
+
   const ym = weeklyData.targetMonth || document.getElementById("targetMonth").value;
   const [yyyy, mm] = ym.split("-").map(Number);
 
