@@ -2868,6 +2868,20 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
+// Phase 15: 水質1週分のデータ送信用に nextMon → fri キー変換
+// GAS の DAY_NAMES/DAY_COLUMNS は 'fri' を想定するため、内部キー 'nextMon' を 'fri' に変換して送信する
+function buildWaterDaysPayload(weekData) {
+  const days = {};
+  if (!weekData) return days;
+  Object.keys(weekData).forEach(function(appKey) {
+    const src = weekData[appKey];
+    if (!src) return;
+    const gasKey = (appKey === "nextMon") ? "fri" : appKey;
+    days[gasKey] = src;
+  });
+  return days;
+}
+
 // 現在のタブ＋週のデータだけをGASに送信
 async function saveCurrentToServer() {
   let payload;
@@ -2880,7 +2894,7 @@ async function saveCurrentToServer() {
       month: weeklyData.targetMonth,
       week: currentWeek,
       startDate: weeklyData.startDate,
-      days: weeklyData.weeks[currentWeek]
+      days: buildWaterDaysPayload(weeklyData.weeks[currentWeek])
     };
   } else if (currentSheet === "equip") {
     payload = {
