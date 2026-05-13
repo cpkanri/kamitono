@@ -3380,57 +3380,8 @@ function bindEvents() {
     });
   });
 
-  // === Phase 17c: 月切替フォーカス飛びガード ===
-  // <input type="month"> クリック時、ブラウザが「直前 focus 元の次の tabbable」へ
-  // focus を自動移動する挙動を阻止する。
-  // change イベント発火**前**に focus 移動が起きるため、change ハンドラ内ではなく
-  // ページロード時にグローバル設置する必要がある（Phase 17b-diag で確認済み）。
-  let _targetMonthGuardActive = false;
-  let _targetMonthGuardTimer = null;
-  const _targetMonthEl = document.getElementById("targetMonth");
-
-  // capture phase でグローバルに focusin を監視
-  document.addEventListener('focusin', (ev) => {
-    if (_targetMonthGuardActive
-        && ev.target !== document.body
-        && ev.target !== _targetMonthEl
-        && typeof ev.target.blur === 'function') {
-      ev.target.blur();
-    }
-  }, true);
-
-  // ガード起動
-  const _activateTargetMonthGuard = () => {
-    _targetMonthGuardActive = true;
-    if (_targetMonthGuardTimer) clearTimeout(_targetMonthGuardTimer);
-    _targetMonthGuardTimer = setTimeout(() => {
-      _targetMonthGuardActive = false;
-    }, 3000); // PC でユーザーがピッカー操作するのに十分な余裕（3秒）
-  };
-
-  // ガード解除（change ハンドラから呼ばれる）
-  // varhoist の都合上、function 宣言で公開する
-  function releaseTargetMonthGuard() {
-    _targetMonthGuardActive = false;
-    if (_targetMonthGuardTimer) {
-      clearTimeout(_targetMonthGuardTimer);
-      _targetMonthGuardTimer = null;
-    }
-  }
-
-  // targetMonth に触れた瞬間にガード起動
-  _targetMonthEl.addEventListener('pointerdown', _activateTargetMonthGuard);
-  _targetMonthEl.addEventListener('focus', _activateTargetMonthGuard);
-  _targetMonthEl.addEventListener('keydown', _activateTargetMonthGuard);
-  // === Phase 17c end ===
-
   // 対象月変更
   document.getElementById("targetMonth").addEventListener("change", (e) => {
-    // Phase 17c: グローバルガードを解除（月選択完了通知）
-    if (typeof releaseTargetMonthGuard === 'function') {
-      releaseTargetMonthGuard();
-    }
-
     saveToStorage();
     const newMonth = e.target.value;
     const raw = localStorage.getItem("kamitono_weekly_" + newMonth);
