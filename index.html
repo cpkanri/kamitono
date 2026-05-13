@@ -3382,6 +3382,22 @@ function bindEvents() {
 
   // 対象月変更
   document.getElementById("targetMonth").addEventListener("change", (e) => {
+    // Phase 17b'': <input type="month"> ピッカー閉じ後のブラウザによる
+    // 「tab 順で次の tabbable 要素へのフォーカス自動移動」を 500ms 間ガードする。
+    // change ハンドラ完了後・setTimeout(0) 後にフォーカス移動が走るブラウザ挙動への対処。
+    let blockingFocus = true;
+    const focusBlocker = (ev) => {
+      if (blockingFocus && ev.target !== document.body
+          && typeof ev.target.blur === 'function') {
+        ev.target.blur();
+      }
+    };
+    document.addEventListener('focusin', focusBlocker);
+    setTimeout(() => {
+      blockingFocus = false;
+      document.removeEventListener('focusin', focusBlocker);
+    }, 500);
+
     saveToStorage();
     const newMonth = e.target.value;
     const raw = localStorage.getItem("kamitono_weekly_" + newMonth);
@@ -3413,15 +3429,6 @@ function bindEvents() {
     showToast("対象月を " + newMonth + " に変更しました");
     // バックグラウンドでサーバーからも取得
     syncFromServer().then(() => updateMldoStatus()).catch(() => {});
-
-    // Phase 17b: <input type="month"> ピッカー閉じ後のブラウザ自動フォーカス移動を抑止
-    e.target.blur();
-    setTimeout(() => {
-      if (document.activeElement && document.activeElement !== document.body
-          && typeof document.activeElement.blur === 'function') {
-        document.activeElement.blur();
-      }
-    }, 0);
   });
 
   // startDate は readonly（自動計算）のため change イベントは不要
