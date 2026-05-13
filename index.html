@@ -2824,7 +2824,6 @@ function saveToStorage() {
   else if (currentSheet === "equip") saveEquipFormToData();
   else if (currentSheet === "elec") saveElecFormToData();
   else if (currentSheet === "mech") saveMechFormToData();
-  weeklyData.targetMonth = document.getElementById("targetMonth").value || weeklyData.targetMonth;
   // startDate はinput値ではなく対象月から常に再計算（readonly のため）
   weeklyData.startDate = estimateStartDate(weeklyData.targetMonth);
 
