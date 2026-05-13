@@ -3413,6 +3413,15 @@ function bindEvents() {
     showToast("対象月を " + newMonth + " に変更しました");
     // バックグラウンドでサーバーからも取得
     syncFromServer().then(() => updateMldoStatus()).catch(() => {});
+
+    // Phase 17b: <input type="month"> ピッカー閉じ後のブラウザ自動フォーカス移動を抑止
+    e.target.blur();
+    setTimeout(() => {
+      if (document.activeElement && document.activeElement !== document.body
+          && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+      }
+    }, 0);
   });
 
   // startDate は readonly（自動計算）のため change イベントは不要
