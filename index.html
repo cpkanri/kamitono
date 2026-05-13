@@ -3380,95 +3380,58 @@ function bindEvents() {
     });
   });
 
-  // === Phase 17b-diag: 診断ログ（Phase 17c で削除予定） ===
-  (function setupDiagListeners() {
-    const t0 = performance.now();
-    const fmt = () => '+' + (performance.now() - t0).toFixed(0) + 'ms';
-    const idOf = (el) => el ? (el.id || el.tagName || 'unknown') : 'null';
+  // === Phase 17c: 月切替フォーカス飛びガード ===
+  // <input type="month"> クリック時、ブラウザが「直前 focus 元の次の tabbable」へ
+  // focus を自動移動する挙動を阻止する。
+  // change イベント発火**前**に focus 移動が起きるため、change ハンドラ内ではなく
+  // ページロード時にグローバル設置する必要がある（Phase 17b-diag で確認済み）。
+  let _targetMonthGuardActive = false;
+  let _targetMonthGuardTimer = null;
+  const _targetMonthEl = document.getElementById("targetMonth");
 
-    document.addEventListener('focusin', (ev) => {
-      console.log('[diag focusin]', fmt(),
-        'target:', idOf(ev.target),
-        'activeElement:', idOf(document.activeElement),
-        'scrollY:', window.scrollY);
-    }, true);
+  // capture phase でグローバルに focusin を監視
+  document.addEventListener('focusin', (ev) => {
+    if (_targetMonthGuardActive
+        && ev.target !== document.body
+        && ev.target !== _targetMonthEl
+        && typeof ev.target.blur === 'function') {
+      ev.target.blur();
+    }
+  }, true);
 
-    document.addEventListener('focus', (ev) => {
-      console.log('[diag focus capture]', fmt(),
-        'target:', idOf(ev.target),
-        'activeElement:', idOf(document.activeElement));
-    }, true);
+  // ガード起動
+  const _activateTargetMonthGuard = () => {
+    _targetMonthGuardActive = true;
+    if (_targetMonthGuardTimer) clearTimeout(_targetMonthGuardTimer);
+    _targetMonthGuardTimer = setTimeout(() => {
+      _targetMonthGuardActive = false;
+    }, 3000); // PC でユーザーがピッカー操作するのに十分な余裕（3秒）
+  };
 
-    document.addEventListener('focusout', (ev) => {
-      console.log('[diag focusout]', fmt(),
-        'target:', idOf(ev.target),
-        'relatedTarget:', idOf(ev.relatedTarget));
-    }, true);
+  // ガード解除（change ハンドラから呼ばれる）
+  // varhoist の都合上、function 宣言で公開する
+  function releaseTargetMonthGuard() {
+    _targetMonthGuardActive = false;
+    if (_targetMonthGuardTimer) {
+      clearTimeout(_targetMonthGuardTimer);
+      _targetMonthGuardTimer = null;
+    }
+  }
 
-    let lastScrollY = window.scrollY;
-    window.addEventListener('scroll', () => {
-      const dy = window.scrollY - lastScrollY;
-      if (Math.abs(dy) > 5) {
-        console.log('[diag scroll]', fmt(),
-          'scrollY:', window.scrollY, 'delta:', dy,
-          'activeElement:', idOf(document.activeElement));
-        lastScrollY = window.scrollY;
-      }
-    }, true);
-
-    document.addEventListener('pointerdown', (ev) => {
-      if (ev.target.id === 'targetMonth') {
-        console.log('[diag pointerdown on targetMonth]', fmt(),
-          'activeElement before:', idOf(document.activeElement));
-      }
-    }, true);
-  })();
-  // === Phase 17b-diag end ===
+  // targetMonth に触れた瞬間にガード起動
+  _targetMonthEl.addEventListener('pointerdown', _activateTargetMonthGuard);
+  _targetMonthEl.addEventListener('focus', _activateTargetMonthGuard);
+  _targetMonthEl.addEventListener('keydown', _activateTargetMonthGuard);
+  // === Phase 17c end ===
 
   // 対象月変更
   document.getElementById("targetMonth").addEventListener("change", (e) => {
-    const _t0 = performance.now();
-    const _fmt = () => '+' + (performance.now() - _t0).toFixed(0) + 'ms';
-    const _idOf = (el) => el ? (el.id || el.tagName || 'unknown') : 'null';
-
-    console.log('[diag change START]', _fmt(),
-      'newMonth:', e.target.value,
-      'activeElement:', _idOf(document.activeElement),
-      'scrollY:', window.scrollY);
-
-    // Phase 17b'': focusin ガード（1500ms に一時延長、診断のため）
-    let blockingFocus = true;
-    const focusBlocker = (ev) => {
-      const before = _idOf(document.activeElement);
-      if (blockingFocus && ev.target !== document.body
-          && typeof ev.target.blur === 'function') {
-        console.log('[diag GUARD blocking]', _fmt(),
-          'target:', _idOf(ev.target),
-          'activeBefore:', before,
-          'scrollY:', window.scrollY);
-        ev.target.blur();
-        console.log('[diag GUARD after blur]', _fmt(),
-          'activeAfter:', _idOf(document.activeElement),
-          'scrollY:', window.scrollY);
-      } else {
-        console.log('[diag GUARD pass]', _fmt(),
-          'target:', _idOf(ev.target),
-          'blocking:', blockingFocus);
-      }
-    };
-    document.addEventListener('focusin', focusBlocker);
-    setTimeout(() => {
-      blockingFocus = false;
-      document.removeEventListener('focusin', focusBlocker);
-      console.log('[diag GUARD released]', _fmt(),
-        'activeElement:', _idOf(document.activeElement),
-        'scrollY:', window.scrollY);
-    }, 1500);
+    // Phase 17c: グローバルガードを解除（月選択完了通知）
+    if (typeof releaseTargetMonthGuard === 'function') {
+      releaseTargetMonthGuard();
+    }
 
     saveToStorage();
-    console.log('[diag after saveToStorage]', _fmt(),
-      'activeElement:', _idOf(document.activeElement));
-
     const newMonth = e.target.value;
     const raw = localStorage.getItem("kamitono_weekly_" + newMonth);
     if (raw) {
@@ -3495,30 +3458,10 @@ function bindEvents() {
     currentDay = "mon";
     updateWeekTabs();
     updateDayTabs();
-    console.log('[diag before loadDataToForm]', _fmt(),
-      'activeElement:', _idOf(document.activeElement),
-      'scrollY:', window.scrollY);
     loadDataToForm();
-    console.log('[diag after loadDataToForm]', _fmt(),
-      'activeElement:', _idOf(document.activeElement),
-      'scrollY:', window.scrollY);
     showToast("対象月を " + newMonth + " に変更しました");
     // バックグラウンドでサーバーからも取得
-    syncFromServer().then(() => {
-      updateMldoStatus();
-      console.log('[diag after syncFromServer.then]', _fmt(),
-        'activeElement:', _idOf(document.activeElement),
-        'scrollY:', window.scrollY);
-    }).catch((err) => {
-      console.log('[diag syncFromServer.catch]', _fmt(),
-        'error:', err && err.message,
-        'activeElement:', _idOf(document.activeElement),
-        'scrollY:', window.scrollY);
-    });
-
-    console.log('[diag change END (sync)]', _fmt(),
-      'activeElement:', _idOf(document.activeElement),
-      'scrollY:', window.scrollY);
+    syncFromServer().then(() => updateMldoStatus()).catch(() => {});
   });
 
   // startDate は readonly（自動計算）のため change イベントは不要
