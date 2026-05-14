@@ -3197,8 +3197,8 @@ function mergeServerData(serverData, expectedMonth) {
           if (rec.date) target.date = rec.date;
           return;
         }
-        // Phase 18-b-2: bikou が ISO タイムスタンプならスキップ
-        if (k === 'bikou' && isISOTimestamp(rec[k])) return;
+        // Phase 18-b-2 / 19-B: bikou・phFinal が ISO タイムスタンプならスキップ
+        if ((k === 'bikou' || k === 'phFinal') && isISOTimestamp(rec[k])) return;
         target[k] = rec[k];
       });
       summary.water_days++;
@@ -5128,6 +5128,63 @@ document.getElementById("btnUndo").addEventListener("click", function() {
   updateUndoBtn();
   showToast("1つ戻しました");
 });
+
+// ===== Phase 19-B: bikou/phFinal ISO タイムスタンプ混入の localStorage クリーン =====
+// 過去に GAS 由来で localStorage 内の bikou / phFinal に ISO タイムスタンプが
+// 混入した可能性があるため、起動時に1回だけ全 kamitono_weekly_ キーを走査して除去する。
+// kamitono_migration_bikou_v1 フラグで二重実行を防止（Phase 11 migration_v1 踏襲）。
+function migrateBikouCleanup() {
+  const MIGRATION_FLAG = "kamitono_migration_bikou_v1";
+  try { if (localStorage.getItem(MIGRATION_FLAG)) return; } catch (e) { return; }
+
+  function isISOTs(v) {
+    return typeof v === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(v);
+  }
+  function cleanNode(obj) {
+    let n = 0;
+    if (!obj || typeof obj !== "object") return n;
+    for (const k in obj) {
+      const v = obj[k];
+      if ((k === "bikou" || k === "phFinal" || k === "phFinal1" || k === "phFinal2") && isISOTs(v)) {
+        obj[k] = "";
+        n++;
+      } else if (v && typeof v === "object") {
+        n += cleanNode(v);
+      }
+    }
+    return n;
+  }
+
+  let cleaned = 0, scanned = 0;
+  const weeklyKeys = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf("kamitono_weekly_") === 0) weeklyKeys.push(k);
+    }
+  } catch (e) {}
+  weeklyKeys.forEach(function (key) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      scanned++;
+      const n = cleanNode(parsed);
+      if (n > 0) {
+        localStorage.setItem(key, JSON.stringify(parsed));
+        cleaned += n;
+      }
+    } catch (e) {}
+  });
+
+  try { localStorage.setItem(MIGRATION_FLAG, new Date().toISOString()); } catch (e) {}
+  if (cleaned > 0) {
+    console.log("[bikou migration] cleaned " + cleaned + " entries (scanned " + scanned + " months)");
+  } else {
+    console.log("[bikou migration] no contamination found (scanned " + scanned + " months)");
+  }
+}
+try { migrateBikouCleanup(); } catch (e) { console.warn("bikou migration error:", e); }
 
 init();
 
