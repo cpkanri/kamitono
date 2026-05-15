@@ -3005,63 +3005,6 @@ function buildWaterDaysPayload(weekData) {
   return days;
 }
 
-// 現在のタブ＋週のデータだけをGASに送信
-async function saveCurrentToServer() {
-  let payload;
-  if (currentSheet === "water") {
-    // startDate と各曜日の日付(YYYY-MM-DD)を自動算出して注入
-    if (!weeklyData.startDate) weeklyData.startDate = estimateStartDate(weeklyData.targetMonth);
-    injectComputedDates(weeklyData.weeks[currentWeek], currentWeek);
-    payload = {
-      action: 'saveWeek',
-      month: weeklyData.targetMonth,
-      week: currentWeek,
-      startDate: weeklyData.startDate,
-      days: buildWaterDaysPayload(weeklyData.weeks[currentWeek])
-    };
-  } else if (currentSheet === "equip") {
-    payload = {
-      action: 'saveEquipment',
-      month: weeklyData.targetMonth,
-      equipment: { [currentWeek]: weeklyData.equipment[currentWeek] }
-    };
-  } else if (currentSheet === "elec") {
-    payload = {
-      action: 'saveElectrical',
-      month: weeklyData.targetMonth,
-      week: currentWeek,
-      electrical: { [currentWeek]: weeklyData.electrical[currentWeek] }
-    };
-  } else if (currentSheet === "mech") {
-    payload = {
-      action: 'saveMechanical',
-      month: weeklyData.targetMonth,
-      week: currentWeek,
-      mechanical: { [currentWeek]: weeklyData.mechanical[currentWeek] }
-    };
-  }
-  console.log('送信データ:', JSON.stringify(payload).substring(0, 500));
-  let res;
-  try {
-    res = await fetchWithTimeout(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(withTokenBody(payload))
-    }, 15000);
-  } catch (fetchErr) {
-    throw new Error('通信失敗: ' + (fetchErr && fetchErr.message ? fetchErr.message : fetchErr));
-  }
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const text = await res.text();
-  let result;
-  try { result = JSON.parse(text); }
-  catch (pe) { throw new Error('JSONパース失敗: ' + text.substring(0, 150)); }
-  console.log('レスポンス:', JSON.stringify(result));
-  if (result && result.authRequired) { handleAuthFailure(); throw new Error('認証が切れました'); }
-  if (result && result.error) throw new Error('GASエラー: ' + result.error);
-  return result;
-}
-
 // 1シート全週を送信（全同期用）
 async function saveSheetToServer(sheetType) {
   let payload;
