@@ -990,7 +990,6 @@ function cleanupGhostRows() {
     Logger.log(spec.name + ': ' + ghostRows.length + '行削除しました');
   }
 }
-function authorizeAll() { var f=DriveApp.getFileById('1sSvOu617yCabXjFLh39k8EpfhGAzP_Y6');f.makeCopy('テスト');SpreadsheetApp.getActiveSpreadsheet();UrlFetchApp.fetch('https://www.google.com');Logger.log('全権限OK'); }
 function __tempSetupHolidays() {
   Logger.log(setupHolidays());
 }
