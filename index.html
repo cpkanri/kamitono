@@ -4283,6 +4283,10 @@ async function exportExcel() {
         wsReport.getCell(8 + d, 1).value = null;
         wsReport.getCell(49 + d, 1).value = null;
       }
+
+      // Phase 23-A 補追2: 終沈3列を localStorage から直接書込
+      // テンプレ E/Q (1/2 ページ) と D (2/2 ページ) は数式・値とも空（日常水質シートに終沈行が無く formula 不可）
+      fillQualityReportFinalCols(wsReport, yyyy, mm, daysInMonth);
     }
 
     // 運転管理月報 A6-A36
@@ -4478,6 +4482,39 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
         setCell(ws, bikouRow, col, day.bikou);
       }
     }
+  }
+}
+
+// Phase 23-A 補追2: 水質管理報告シートの終沈3列のみ直接書込
+// テンプレ仕様: 流入/ディッチ/放流は 日常水質 シート参照の数式で埋まるが、
+// 終沈は 日常水質 に行が無く数式も無いため空のまま。localStorage から直接書く。
+// 対象セル:
+//   1/2 ページ E8-E38: 水温終沈 (tempFinal)
+//   1/2 ページ Q8-Q38: PH 終沈 (phFinal)
+//   2/2 ページ D49-D79: 透視度終沈 (transFinal) ※テンプレ sub-label は "ディッチ" だが位置は終沈相当
+function fillQualityReportFinalCols(ws, yyyy, mm, daysInMonth) {
+  if (!ws) return;
+  // weeklyData を日付キーマップに展開
+  const dateMap = {};
+  for (let w = 1; w <= 5; w++) {
+    const weekData = weeklyData.weeks && weeklyData.weeks[w];
+    if (!weekData) continue;
+    ["mon", "tue", "wed", "thu", "nextMon"].forEach((dayKey) => {
+      const dateObj = getActualDate(w, dayKey);
+      if (!dateObj) return;
+      const key = formatYMD(dateObj);
+      if (key && weekData[dayKey]) dateMap[key] = weekData[dayKey];
+    });
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = yyyy + "-" + String(mm).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+    const day = dateMap[key];
+    if (!day) continue;
+    const row1 = 7 + d;  // 1/2 ページ Row8=1日
+    const row2 = 48 + d; // 2/2 ページ Row49=1日
+    setCell(ws, row1, 5,  day.tempFinal);  // E
+    setCell(ws, row1, 17, day.phFinal);    // Q
+    setCell(ws, row2, 4,  day.transFinal); // D
   }
 }
 
