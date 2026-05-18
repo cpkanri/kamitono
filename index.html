@@ -3024,11 +3024,14 @@ async function saveSheetToServer(sheetType) {
   }
   let res;
   try {
+    // Phase 25-b: 30s→60s 延長。GAS 側は実は完了しているが client が早期 abort
+    // して UX を悪化させていたため（特に 機器 タブで顕著、entry 5 系とは別系統の純粋
+    // GAS 処理時間オーバー）。将来的に GAS 側 N+1 解消で根治予定（保留中）。
     res = await fetchWithTimeout(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify(withTokenBody(payload))
-    }, 30000);
+    }, 60000);
   } catch (fetchErr) {
     throw new Error('通信失敗: ' + (fetchErr && fetchErr.message ? fetchErr.message : fetchErr));
   }
