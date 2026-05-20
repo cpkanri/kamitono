@@ -4579,6 +4579,79 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
       }
     }
   }
+
+  // ===== O列（種別A 4項目の期間平均/日消費量）を JS で計算して書込（Phase 27-d）=====
+  // テンプレ v6 で種別A 20セル（O4/5/6/10 ＋各週 +46offset）の O列数式を空セル化したため、
+  // ここで値を直接書く。Excel 数式（Phase 27-c）が実機で空セル判定に失敗したための方針転換。
+  //   通常週: I列(月曜reading)起点。 num=(終点reading - 月曜値), den=(終点日 - 月曜日)
+  //   祝日週(I列=空): J:N範囲の最初の非空reading起点。 num/den とも J:N の最初〜最後で算出
+  //   終点reading は常に J:N（火〜金 ＋ N列=翌週初日reading）の最後の非空値
+  // 種別B 3項目(diesel/returnSludge/excessSludge)はテンプレ AVERAGEIF 維持のため触らない。
+  const O_COL = 15;
+  const AVG_METER_KEYS = ["power200v", "power100v", "water", "discharge"];
+  const JM_DAY_KEYS = ["tue", "wed", "thu", "fri"]; // J/K/L/M列。N列は翌週初日readingで別途追加
+  for (let w = 1; w <= 5; w++) {
+    const week = weeklyData.weeks && weeklyData.weeks[w];
+    if (!week) continue;
+    const dataRowBase = DATA_ROW_BASE + WEEK_OFFSETS[w];
+    // N列（翌週初日reading）の日付と複製元データを特定（Phase 26-b の N列複製と同方式）
+    const nextWorkday = getNextWeekFirstWorkday(getActualDate(w, "fri"), holidaySet);
+    const nextDay = nextWorkday
+      ? ((w < 5) ? thisMonthDateMap[dateToStr(nextWorkday)] : nextMonthDateMap[dateToStr(nextWorkday)])
+      : null;
+
+    for (const key of AVG_METER_KEYS) {
+      const itemRow = dataRowBase + ITEM_OFFSETS[key];
+      // J〜M（火〜金）＋ N（翌週初日reading）の reading 値・日付を非空・数値のみ収集
+      const readings = [];
+      for (const dk of JM_DAY_KEYS) {
+        const day = week[APP_KEY_MAP[dk]];
+        const v = day ? day[key] : undefined;
+        const d = getActualDate(w, dk);
+        if (v !== null && v !== undefined && v !== "" && d && !isNaN(Number(v))) {
+          readings.push({ value: Number(v), date: d });
+        }
+      }
+      if (nextDay && nextWorkday) {
+        const nv = nextDay[key];
+        if (nv !== null && nv !== undefined && nv !== "" && !isNaN(Number(nv))) {
+          readings.push({ value: Number(nv), date: nextWorkday });
+        }
+      }
+      if (readings.length < 1) continue; // reading 無し → O列は空のまま
+
+      // I列値 = 月曜reading（テンプレ I列セルは読まず weeklyData から取得）。空なら祝日週。
+      const monDay = week[APP_KEY_MAP["mon"]];
+      const iRaw = monDay ? monDay[key] : undefined;
+      const hasI = (iRaw !== null && iRaw !== undefined && iRaw !== "" && !isNaN(Number(iRaw)));
+      const iDate = getActualDate(w, "mon");
+
+      const last = readings[readings.length - 1];
+      let num, den;
+      if (hasI && iDate) {
+        // 通常週: I列(月曜)起点
+        num = last.value - Number(iRaw);
+        den = (last.date - iDate) / 86400000;
+      } else {
+        // 祝日週: J:N の最初の非空 reading 起点（差分計算に2点必要）
+        if (readings.length < 2) continue;
+        const first = readings[0];
+        num = last.value - first.value;
+        den = (last.date - first.date) / 86400000;
+      }
+      if (!den || isNaN(num) || isNaN(den)) continue; // 0除算・NaN回避
+
+      const avg = num / den;
+      if (avg === 0) {
+        setCell(ws, itemRow, O_COL, 0);
+      } else {
+        // 既存数式 ROUND(val, MAX(2,-INT(LOG10(ABS(val))))) と同じ有効桁数で丸め
+        const digits = Math.max(2, -Math.floor(Math.log10(Math.abs(avg))));
+        const factor = Math.pow(10, digits);
+        setCell(ws, itemRow, O_COL, Math.round(avg * factor) / factor);
+      }
+    }
+  }
 }
 
 // Phase 23-A 補追2: 水質管理報告シートの終沈3列のみ直接書込
