@@ -4386,6 +4386,48 @@ function getPrevMonthLastDayData(targetMonth, firstMonday, holidaySet) {
   return null;
 }
 
+// ===== N列翌週複製用ヘルパー（Phase 26-b）=====
+// weeklyData オブジェクトから「YYYY-MM-DD → その日の点検データ」マップを構築する。
+// 日付は startDate + 週/曜日オフセットで算出（getActualDate と同じ規則、nextMon=金）。
+function buildWaterDateMap(wd) {
+  const map = {};
+  if (!wd || !wd.weeks || !wd.startDate) return map;
+  const base = new Date(wd.startDate + "T00:00:00");
+  if (isNaN(base.getTime())) return map;
+  const dayOffsetMap = { mon: 0, tue: 1, wed: 2, thu: 3, nextMon: 4 };
+  for (let wk = 1; wk <= 5; wk++) {
+    const wkData = wd.weeks[wk];
+    if (!wkData) continue;
+    for (const dk in dayOffsetMap) {
+      const dd = wkData[dk];
+      if (!dd) continue;
+      const d = new Date(base);
+      d.setDate(base.getDate() + (wk - 1) * 7 + dayOffsetMap[dk]);
+      map[dateToStr(d)] = dd;
+    }
+  }
+  return map;
+}
+
+// 翌月の日常水質データを「YYYY-MM-DD → 点検データ」マップで返す（第5週N列用）。
+// 翌月分の localStorage が無ければ空マップ（N列は空欄でフォールバック）。
+function getNextMonthWaterDateMap(targetMonth) {
+  if (!targetMonth) return {};
+  const parts = String(targetMonth).split("-");
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (isNaN(y) || isNaN(m)) return {};
+  const nextY = m === 12 ? y + 1 : y;
+  const nextM = m === 12 ? 1 : m + 1;
+  const nextKey = "kamitono_weekly_" + nextY + "-" + String(nextM).padStart(2, "0");
+  let raw = null;
+  try { raw = localStorage.getItem(nextKey); } catch (e) { return {}; }
+  if (!raw) return {};
+  let nextWeekly;
+  try { nextWeekly = JSON.parse(raw); } catch (e) { return {}; }
+  return buildWaterDateMap(nextWeekly);
+}
+
 function fillWaterSheet(ws, yyyy, mm, holidaySet) {
   holidaySet = holidaySet || new Set();
   const WEEK_OFFSETS = { 1: 0, 2: 46, 3: 92, 4: 138, 5: 184 };
@@ -4424,6 +4466,13 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
       for (let r = 0; r < 7; r++) ws.getCell(DATA_ROW_BASE + r, 9).value = null;
     }
   }
+
+  // ===== N列（積算値テーブル）翌週複製用の日付マップ（Phase 26-b）=====
+  // 各週N列 = 翌週初日reading の複製。第1-4週は当月内、第5週は翌月を参照。
+  const thisMonthDateMap = buildWaterDateMap(weeklyData);
+  const nextMonthDateMap = getNextMonthWaterDateMap(
+    weeklyData.targetMonth || (yyyy + "-" + String(mm).padStart(2, "0"))
+  );
 
   for (let w = 1; w <= 5; w++) {
     const offset = WEEK_OFFSETS[w];
@@ -4487,6 +4536,21 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
       const day = weeklyData.weeks[w] && weeklyData.weeks[w][dataKey];
       if (day && day.bikou) {
         setCell(ws, bikouRow, col, day.bikou);
+      }
+    }
+
+    // ===== N列（次週の最初の平日）に積算値データを複製書込（Phase 26-b）=====
+    // N列ヘッダー(nextWorkday)の日付に一致する翌週/翌月の点検データを、
+    // 積算値テーブル(Row4-10相当)のN列(14列)へ複製する（週間複製）。
+    // 日付一致で複製するため運転管理月報の INDEX/MATCH 参照とも整合する。
+    // 第1-4週は当月内の翌週、第5週は翌月を参照（翌月データ無ければ空欄）。
+    if (nextWorkday) {
+      const nKey = dateToStr(nextWorkday);
+      const nextDay = (w < 5) ? thisMonthDateMap[nKey] : nextMonthDateMap[nKey];
+      if (nextDay) {
+        RUISAN_KEYS.forEach((key, i) => {
+          setCell(ws, dataRowBase + i, NEXT_WEEK_COL, nextDay[key]);
+        });
       }
     }
   }
