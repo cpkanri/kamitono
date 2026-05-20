@@ -4195,7 +4195,9 @@ async function exportExcel() {
         }
       }
       // 各週の I4〜I10 の N列参照式（=N188, =N4 等）を削除
-      // これは「前週のN列データを次週Iに引き継ぐ」仕組みだが、現在のN列は日付のみなので不要
+      // 元は「前週のN列データを次週Iに引き継ぐ」キャリーオーバー式。現在 I 列は
+      // データ書込ループの月曜直書き＋祝日週フォールバック（Phase 27-b）で埋めるため不要。
+      // （N列は Phase 26-b で翌週初日 reading 値が複製されるようになった）
       const WATER_WEEK_OFFSETS = { 1: 0, 2: 46, 3: 92, 4: 138, 5: 184 };
       for (const w of [1, 2, 3, 4, 5]) {
         const offset = WATER_WEEK_OFFSETS[w];
@@ -4437,6 +4439,25 @@ function getNextMonthWaterDateMap(targetMonth) {
   return buildWaterDateMap(nextWeekly);
 }
 
+// ===== 祝日週フォールバック用ヘルパー（Phase 27-b）=====
+// 週データから「累計メーター4項目のいずれかに非空値がある最初の曜日」を返す。
+// 月曜が祝日等で空の週でも、最初に reading のあった日を I 列の起点に使う。
+// 判定対象は累計メーター4項目（種別A）のみ。曜日キーは UI 表記（mon..fri）で返し、
+// 週データへのアクセスは APP_KEY_MAP 経由（fri→nextMon）で行う。
+function findFirstReadingDay(weekData) {
+  if (!weekData) return null;
+  const meterKeys = ["power200v", "power100v", "water", "discharge"];
+  for (const dk of ["mon", "tue", "wed", "thu", "fri"]) {
+    const dd = weekData[APP_KEY_MAP[dk]];
+    if (!dd) continue;
+    for (const key of meterKeys) {
+      const v = dd[key];
+      if (v !== null && v !== undefined && v !== "") return dk;
+    }
+  }
+  return null;
+}
+
 function fillWaterSheet(ws, yyyy, mm, holidaySet) {
   holidaySet = holidaySet || new Set();
   const WEEK_OFFSETS = { 1: 0, 2: 46, 3: 92, 4: 138, 5: 184 };
@@ -4458,7 +4479,8 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
   const INSP_ROW_BASE = 13;
 
   // ===== 第1週I列: 前月最終点検日のデータを書き込む =====
-  // （第2週以降のI列はテンプレート数式 =N49 等で自動参照される）
+  // 第2-5週のI列はデータ書込ループの月曜直書き、月曜が空の週は
+  // 祝日週フォールバック（Phase 27-b、本関数末尾）で最初のreading日の値を埋める。
   const firstMondayDate = getActualDate(1, "mon");
   if (firstMondayDate) {
     const prevLast = getPrevMonthLastDayData(weeklyData.targetMonth, firstMondayDate, holidaySet);
@@ -4483,6 +4505,16 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
     weeklyData.targetMonth || (yyyy + "-" + String(mm).padStart(2, "0"))
   );
 
+  // ===== 第1週 月曜に reading があるか（Phase 27-b: I3日付の上書き判定用）=====
+  // 月曜に累計メーター reading があれば日付ループで I3=月曜日付（I4=月曜値と整合）。
+  // 月曜が空なら日付ループの I 列上書きをスキップし、上の専用ブロックが書いた
+  // 前月最終点検日（I3）を残して I3 と I4 の日付不整合を防ぐ。
+  const week1MonData = weeklyData.weeks && weeklyData.weeks[1] && weeklyData.weeks[1][APP_KEY_MAP["mon"]];
+  const week1MonHasReading = !!week1MonData && ["power200v", "power100v", "water", "discharge"].some(k => {
+    const v = week1MonData[k];
+    return v !== null && v !== undefined && v !== "";
+  });
+
   for (let w = 1; w <= 5; w++) {
     const offset = WEEK_OFFSETS[w];
     const dateRow = DATE_ROW_BASE + offset;
@@ -4493,6 +4525,9 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
     // I〜M: 月〜金 の日付を値として書く
     for (const dk in DAY_COL) {
       const col = DAY_COL[dk];
+      // Phase 27-b: 第1週I列(月曜)は、月曜に reading が無ければ上書きしない。
+      // 専用ブロックが書いた前月最終点検日(I3)を残し、I4(前月値)との整合を保つ。
+      if (w === 1 && col === 9 && !week1MonHasReading) continue;
       const actual = getActualDate(w, dk);
       if (actual) {
         const cell = ws.getCell(dateRow, col);
@@ -4561,6 +4596,44 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
           setCell(ws, dataRowBase + i, NEXT_WEEK_COL, nextDay[key]);
         });
       }
+    }
+  }
+
+  // ===== 第2-5週 祝日週フォールバック（Phase 27-b）=====
+  // 月曜に reading が無い週（祝日連休等）は、その週で最初に reading のあった日の
+  // 値・日付を I 列へ書き込む。O 列数式は I 列を起点に実日付ベースで期間を動的算出
+  // するため、これだけで祝日週の「平均/日消費量」が正しい期間で計算される。
+  // 対象は累計メーター4行（種別A=power200v/power100v/water/discharge）のみ。
+  // 種別B（diesel/returnSludge/excessSludge）はAVERAGEIF集計で I 列に書くと
+  // 二重計上になるためノータッチ。第1週は前月繰越が起点のため対象外。
+  const FALLBACK_METER_KEYS = ["power200v", "power100v", "water", "discharge"];
+  for (let w = 2; w <= 5; w++) {
+    const weekData = weeklyData.weeks && weeklyData.weeks[w];
+    if (!weekData) continue;
+    const monData = weekData[APP_KEY_MAP["mon"]];
+    const monHasReading = !!monData && FALLBACK_METER_KEYS.some(k => {
+      const v = monData[k];
+      return v !== null && v !== undefined && v !== "";
+    });
+    if (monHasReading) continue; // 通常週: 何もしない
+
+    const firstDk = findFirstReadingDay(weekData);
+    if (!firstDk) continue; // 週全体に reading 無し: I 列は空のまま許容
+
+    const offset = WEEK_OFFSETS[w];
+    const firstData = weekData[APP_KEY_MAP[firstDk]];
+    // I 列 累計メーター4行に「最初の reading 日」の値を書込
+    FALLBACK_METER_KEYS.forEach(key => {
+      const itemOffset = ITEM_OFFSETS[key];
+      if (itemOffset === undefined) return;
+      setCell(ws, DATA_ROW_BASE + offset + itemOffset, 9, firstData[key]);
+    });
+    // I3 日付（col 9）を「最初の reading 日」で上書き（日付ループは月曜日付を入れている）
+    const firstDate = getActualDate(w, firstDk);
+    if (firstDate) {
+      const dc = ws.getCell(DATE_ROW_BASE + offset, 9);
+      dc.value = toExcelDate(firstDate);
+      dc.numFmt = 'm"月"d"日("aaa")"';
     }
   }
 }
