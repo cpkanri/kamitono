@@ -426,6 +426,15 @@ header h1 {
   background: #fff;
   box-shadow: 0 0 0 2px rgba(13,79,52,0.15);
 }
+/* Phase 28: 機器運転時間タブのみ 横スクロール対応（#equipTable に min-width。
+   親 .equip-wrap の既存 overflow-x:auto でスクロール。elec/mech には影響なし） */
+#equipTable {
+  min-width: 640px;
+}
+#equipTable input[type="number"],
+#equipTable input[type="text"] {
+  min-width: 80px;
+}
 /* 列コピーボタン */
 .col-copy-btn {
   display: inline-block;
