@@ -3023,7 +3023,14 @@ async function saveSheetToServer(sheetType) {
     Object.keys(weeklyData.weeks || {}).forEach(w => {
       injectComputedDates(weeklyData.weeks[w], parseInt(w, 10));
     });
-    payload = { action: 'saveAll', month: weeklyData.targetMonth, startDate: weeklyData.startDate, weeks: weeklyData.weeks };
+    // Phase 32: 各週を buildWaterDaysPayload で nextMon→fri 変換してから送信。
+    // Phase 15 で導入されたが未結線(デッドコード)だったため、金曜が GAS の DAY_NAMES
+    // (fri 想定) に一致せず saveWeekData でスキップされ消失していた。
+    const convertedWeeks = {};
+    Object.keys(weeklyData.weeks || {}).forEach(w => {
+      convertedWeeks[w] = buildWaterDaysPayload(weeklyData.weeks[w]);
+    });
+    payload = { action: 'saveAll', month: weeklyData.targetMonth, startDate: weeklyData.startDate, weeks: convertedWeeks };
   } else if (sheetType === "equip") {
     payload = { action: 'saveEquipment', month: weeklyData.targetMonth, equipment: weeklyData.equipment };
   } else if (sheetType === "elec") {
@@ -3149,9 +3156,12 @@ function mergeServerData(serverData, expectedMonth) {
     serverData.water.forEach(rec => {
       if (!rec) return;
       const w = rec.week;
-      const dayCode = DAY_JP_TO_CODE[rec.day] || rec.day;
+      let dayCode = DAY_JP_TO_CODE[rec.day] || rec.day;
       if (!w || !dayCode) return;
       if (!weeklyData.weeks[w]) weeklyData.weeks[w] = emptyWeek();
+      // Phase 32: サーバの金曜は "fri"、水質タブ内部キーは "nextMon" のため再マップ。
+      // これがないと weeklyData.weeks[w]["fri"]=undefined で金曜の読込がスキップされる。
+      if (dayCode === "fri") dayCode = "nextMon";
       if (!weeklyData.weeks[w][dayCode]) return;
       const target = weeklyData.weeks[w][dayCode];
       Object.keys(rec).forEach(k => {
