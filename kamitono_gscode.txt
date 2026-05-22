@@ -1,10 +1,10 @@
 // =====================================================================
-// kamitono GAS バックエンド スナップショット (Phase 21-B)
-// 取得日: 2026-05-16
+// kamitono GAS バックエンド スナップショット (Phase 25-c-1a 反映後)
+// 取得日: 2026-05-22
 // 取得方法: clasp clone <scriptId>
 // .gs ファイル数: 1 件
 // 内訳:
-//   コード.js   (元: コード.gs)   1011 行 / 46748 bytes
+//   コード.js   (元: コード.gs)   1090 行 / 50428 bytes
 // scriptId / マニフェスト / .clasp.json は同ディレクトリの .clasp.json と appsscript.json を参照
 // =====================================================================
 
@@ -700,12 +700,33 @@ function saveWeekData(data) {
   // A列の自動Date変換を防ぐためプレーンテキスト書式に固定
   sheet.getRange('A:A').setNumberFormat('@');
   var monthStr=String(month);
+  // Phase 25-c-1a: 索引マップを1回の getValues で事前構築（findRow 毎回全件読込の N+1 解消）。
+  // matchMonth で当月行のみ採用 → キーは week|day。重複行は先勝ち（findRow と同挙動）。
+  var lr=sheet.getLastRow(),indexMap={};
+  if(lr>=2){
+    var idx=sheet.getRange(2,1,lr-1,3).getValues();
+    for(var ii=0;ii<idx.length;ii++){
+      if(!matchMonth(idx[ii][0],monthStr))continue;
+      var ik=String(idx[ii][1])+'|'+String(idx[ii][2]).trim();
+      if(!(ik in indexMap))indexMap[ik]=ii+2;
+    }
+  }
+  var newRows=[];
   for(var dc in days){var dd=days[dc]; if(!dd)continue; var dn=DAY_NAMES[dc]; if(!dn)continue;
     if(isWaterRecordEmpty(dd)){skipped++;continue;}
-    var ri=findRow(sheet,monthStr,week,dn),rv=[monthStr,parseInt(week),dn,toDateStr(dd.date)||''];
+    var rv=[monthStr,parseInt(week),dn,toDateStr(dd.date)||''];
     for(var f in FIELD_MAP){var v=dd[f];rv.push(v!=null&&v!=undefined&&v!==''?v:'');} rv.push(now);
-    if(ri>0){sheet.getRange(ri,1,1,rv.length).setValues([rv]);}else{sheet.appendRow(rv);} cnt++;
-  } sortSheet(sheet); return jsonResponse({status:'ok',message:'水質'+cnt+'日分保存',savedCount:cnt,skippedCount:skipped});
+    var ri=indexMap[String(week)+'|'+String(dn).trim()];
+    if(ri){sheet.getRange(ri,1,1,rv.length).setValues([rv]);}else{newRows.push(rv);} cnt++;
+  }
+  // Phase 25-c-1a: 新規行は末尾へ1回の setValues でバッチ追加（appendRow 逐次の N+1 解消）
+  if(newRows.length>0){
+    var mr=sheet.getMaxRows();
+    if(mr<lr+newRows.length)sheet.insertRowsAfter(mr,lr+newRows.length-mr);
+    sheet.getRange(lr+1,1,newRows.length,newRows[0].length).setValues(newRows);
+  }
+  sortSheet(sheet);
+  return jsonResponse({status:'ok',message:'水質'+cnt+'日分保存',savedCount:cnt,skippedCount:skipped});
 }
 function saveAllData(data) {
   var month=data.month,weeks=data.weeks; if(!month||!weeks) return jsonResponse({error:'パラメータ不足'});
@@ -722,13 +743,33 @@ function saveEquipmentData(data) {
   // A列の自動Date変換を防ぐためプレーンテキスト書式に固定
   sheet.getRange('A:A').setNumberFormat('@');
   var monthStr=String(month),now=new Date(),cnt=0;
+  // Phase 25-c-1a: 索引マップを1回の getValues で事前構築（findEquipRow 毎回全件読込の N+1 解消）。
+  // matchMonth で当月行のみ採用 → キーは week|機器ラベル。重複行は先勝ち（findEquipRow と同挙動）。
+  var lr=sheet.getLastRow(),indexMap={};
+  if(lr>=2){
+    var idx=sheet.getRange(2,1,lr-1,3).getValues();
+    for(var ii=0;ii<idx.length;ii++){
+      if(!matchMonth(idx[ii][0],monthStr))continue;
+      var ik=String(idx[ii][1])+'|'+String(idx[ii][2]).trim();
+      if(!(ik in indexMap))indexMap[ik]=ii+2;
+    }
+  }
+  var newRows=[];
   for(var wn in eq){var wd=eq[wn]; for(var e=0;e<EQUIP_NAMES.length;e++){
     var ek=EQUIP_NAMES[e],el=EQUIP_LABELS[e],ed=wd[ek]; if(!ed)continue;
-    var ri=findEquipRow(sheet,monthStr,parseInt(wn),el);
     var rv=[monthStr,parseInt(wn),el,ed.mon!=null?ed.mon:'',ed.tue!=null?ed.tue:'',ed.wed!=null?ed.wed:'',ed.thu!=null?ed.thu:'',ed.fri!=null?ed.fri:'',now];
-    if(ri>0){sheet.getRange(ri,1,1,rv.length).setValues([rv]);}else{sheet.appendRow(rv);} cnt++;
-  }} return jsonResponse({status:'ok',message:'機器'+cnt+'件保存',savedCount:cnt});
+    var ri=indexMap[String(parseInt(wn))+'|'+String(el).trim()];
+    if(ri){sheet.getRange(ri,1,1,rv.length).setValues([rv]);}else{newRows.push(rv);} cnt++;
+  }}
+  // Phase 25-c-1a: 新規行は末尾へ1回の setValues でバッチ追加（appendRow 逐次の N+1 解消）
+  if(newRows.length>0){
+    var mr=sheet.getMaxRows();
+    if(mr<lr+newRows.length)sheet.insertRowsAfter(mr,lr+newRows.length-mr);
+    sheet.getRange(lr+1,1,newRows.length,newRows[0].length).setValues(newRows);
+  }
+  return jsonResponse({status:'ok',message:'機器'+cnt+'件保存',savedCount:cnt});
 }
+// Phase 25-c-1a 以降 未使用: saveEquipmentData は索引マップ方式へ移行。呼出復活に備え残置。
 function findEquipRow(sheet,month,week,label) {
   var lr=sheet.getLastRow(); if(lr<=1) return -1;
   var d=sheet.getRange(2,1,lr-1,3).getValues();
@@ -756,13 +797,32 @@ function saveElectricalData(data) {
   // A列の自動Date変換を防ぐためプレーンテキスト書式に固定
   sheet.getRange('A:A').setNumberFormat('@');
   var monthStr=String(month),now=new Date(),cnt=0,skipped=0;
+  // Phase 25-c-1a: 索引マップを1回の getValues で事前構築（findRow 毎回全件読込の N+1 解消）。
+  // matchMonth で当月行のみ採用 → キーは week|day。重複行は先勝ち（findRow と同挙動）。
+  var lr=sheet.getLastRow(),indexMap={};
+  if(lr>=2){
+    var idx=sheet.getRange(2,1,lr-1,3).getValues();
+    for(var ii=0;ii<idx.length;ii++){
+      if(!matchMonth(idx[ii][0],monthStr))continue;
+      var ik=String(idx[ii][1])+'|'+String(idx[ii][2]).trim();
+      if(!(ik in indexMap))indexMap[ik]=ii+2;
+    }
+  }
+  var newRows=[];
   for(var wn in el){var wd=el[wn]; for(var dc in wd){var dd=wd[dc]; if(!dd)continue;
     var dn=DAY_NAMES[dc]; if(!dn)continue;
     if(isElectricalRecordEmpty(dd)){skipped++;continue;}
-    var ri=findRow(sheet,monthStr,parseInt(wn),dn);
     var rv=[monthStr,parseInt(wn),dn]; for(var f=0;f<ELEC_FIELDS.length;f++){var v=dd[ELEC_FIELDS[f]];rv.push(v!=null&&v!=undefined&&v!==''?v:'');} rv.push(now);
-    if(ri>0){sheet.getRange(ri,1,1,rv.length).setValues([rv]);}else{sheet.appendRow(rv);} cnt++;
-  }} return jsonResponse({status:'ok',message:'電気'+cnt+'日分保存',savedCount:cnt,skippedCount:skipped});
+    var ri=indexMap[String(parseInt(wn))+'|'+String(dn).trim()];
+    if(ri){sheet.getRange(ri,1,1,rv.length).setValues([rv]);}else{newRows.push(rv);} cnt++;
+  }}
+  // Phase 25-c-1a: 新規行は末尾へ1回の setValues でバッチ追加（appendRow 逐次の N+1 解消）
+  if(newRows.length>0){
+    var mr=sheet.getMaxRows();
+    if(mr<lr+newRows.length)sheet.insertRowsAfter(mr,lr+newRows.length-mr);
+    sheet.getRange(lr+1,1,newRows.length,newRows[0].length).setValues(newRows);
+  }
+  return jsonResponse({status:'ok',message:'電気'+cnt+'日分保存',savedCount:cnt,skippedCount:skipped});
 }
 
 // ===== 機械設備 =====
@@ -781,13 +841,32 @@ function saveMechanicalData(data) {
   // A列の自動Date変換を防ぐためプレーンテキスト書式に固定
   sheet.getRange('A:A').setNumberFormat('@');
   var monthStr=String(month),now=new Date(),cnt=0,skipped=0;
+  // Phase 25-c-1a: 索引マップを1回の getValues で事前構築（findRow 毎回全件読込の N+1 解消）。
+  // matchMonth で当月行のみ採用 → キーは week|day。重複行は先勝ち（findRow と同挙動）。
+  var lr=sheet.getLastRow(),indexMap={};
+  if(lr>=2){
+    var idx=sheet.getRange(2,1,lr-1,3).getValues();
+    for(var ii=0;ii<idx.length;ii++){
+      if(!matchMonth(idx[ii][0],monthStr))continue;
+      var ik=String(idx[ii][1])+'|'+String(idx[ii][2]).trim();
+      if(!(ik in indexMap))indexMap[ik]=ii+2;
+    }
+  }
+  var newRows=[];
   for(var wn in mech){var wd=mech[wn]; for(var dc in wd){var dd=wd[dc]; if(!dd)continue;
     var dn=DAY_NAMES[dc]; if(!dn)continue;
     if(isMechanicalRecordEmpty(dd)){skipped++;continue;}
-    var ri=findRow(sheet,monthStr,parseInt(wn),dn);
     var js=JSON.stringify(dd),rv=[monthStr,parseInt(wn),dn,js,now];
-    if(ri>0){sheet.getRange(ri,1,1,rv.length).setValues([rv]);}else{sheet.appendRow(rv);} cnt++;
-  }} return jsonResponse({status:'ok',message:'機械'+cnt+'日分保存',savedCount:cnt,skippedCount:skipped});
+    var ri=indexMap[String(parseInt(wn))+'|'+String(dn).trim()];
+    if(ri){sheet.getRange(ri,1,1,rv.length).setValues([rv]);}else{newRows.push(rv);} cnt++;
+  }}
+  // Phase 25-c-1a: 新規行は末尾へ1回の setValues でバッチ追加（appendRow 逐次の N+1 解消）
+  if(newRows.length>0){
+    var mr=sheet.getMaxRows();
+    if(mr<lr+newRows.length)sheet.insertRowsAfter(mr,lr+newRows.length-mr);
+    sheet.getRange(lr+1,1,newRows.length,newRows[0].length).setValues(newRows);
+  }
+  return jsonResponse({status:'ok',message:'機械'+cnt+'日分保存',savedCount:cnt,skippedCount:skipped});
 }
 
 // ===== 全データ一括保存 =====
@@ -937,6 +1016,7 @@ function exportExcel(month, templateId) {
 }
 
 // ===== 共通関数 =====
+// Phase 25-c-1a 以降 未使用: save 系3関数は索引マップ方式へ移行。呼出復活に備え残置。
 function findRow(sheet,month,week,dayName) {
   var lr=sheet.getLastRow();if(lr<=1) return -1;
   var d=sheet.getRange(2,1,lr-1,3).getValues();
