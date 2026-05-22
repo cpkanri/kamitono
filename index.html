@@ -3956,7 +3956,9 @@ function bindEvents() {
     btn.textContent = "計算中...";
     try {
       const url = withToken(GAS_URL + '?action=computeMldo&month=' + encodeURIComponent(weeklyData.targetMonth));
-      const res = await fetchWithTimeout(url, { method: 'GET' }, 30000);
+      // Phase 25-c-2: 30s→60s 延長。client abort は GAS を止めず、コールドスタート＋
+      // 既存 N+1 (Phase 25-c-1 で根治予定) で 30s 超過し偽失敗トーストが出ていた事象を解消。
+      const res = await fetchWithTimeout(url, { method: 'GET' }, 60000);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
