@@ -1,9 +1,10 @@
 // 上殿浄化センター 週報 Service Worker
-const CACHE_NAME = 'kamitono-v73';
+const CACHE_NAME = 'kamitono-v74';
 const ASSETS = [
   './',
   './index.html',
   './template.js',
+  './excel-write-map.js',
   './manifest.json',
   './kamitono_icon_180.png',
   './kamitono_icon_192.png',
