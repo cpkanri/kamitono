@@ -4722,6 +4722,12 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
 //   2/2 ページ D49-D79: 透視度終沈 (transFinal) ※テンプレ sub-label は "ディッチ" だが位置は終沈相当
 function fillQualityReportFinalCols(ws, yyyy, mm, daysInMonth) {
   if (!ws) return;
+  // Phase 38-b3+ Step 2: 終沈 3 setCell の col 値を MAP 動的参照
+  // excel-write-map.js の monthly.col 値を参照、起動時 verify で整合性保証
+  const _writeMap = window.EXCEL_WRITE_MAP;
+  const _tempCol  = _writeMap.tempFinal.monthly.col;   // 期待値: 5 (page1 E列)
+  const _phCol    = _writeMap.phFinal.monthly.col;     // 期待値: 17 (page1 Q列)
+  const _transCol = _writeMap.transFinal.monthly.col;  // 期待値: 4 (page2 D列)
   // weeklyData を日付キーマップに展開
   const dateMap = {};
   for (let w = 1; w <= 5; w++) {
@@ -4740,9 +4746,9 @@ function fillQualityReportFinalCols(ws, yyyy, mm, daysInMonth) {
     if (!day) continue;
     const row1 = 7 + d;  // 1/2 ページ Row8=1日
     const row2 = 48 + d; // 2/2 ページ Row49=1日
-    setCell(ws, row1, 5,  day.tempFinal);  // E
-    setCell(ws, row1, 17, day.phFinal);    // Q
-    setCell(ws, row2, 4,  day.transFinal); // D
+    setCell(ws, row1, _tempCol,  day.tempFinal);  // E
+    setCell(ws, row1, _phCol,    day.phFinal);    // Q
+    setCell(ws, row2, _transCol, day.transFinal); // D
   }
 }
 
