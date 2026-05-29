@@ -1,7 +1,7 @@
 // =====================================================================
-// kamitono GAS バックエンド スナップショット (Phase 25-c-1a 反映後)
-// 取得日: 2026-05-22
-// 取得方法: clasp clone <scriptId>
+// kamitono GAS バックエンド スナップショット (Phase 25-c-β 反映後)
+// 更新日: 2026-05-29
+// 取得方法: clasp clone <scriptId> + Phase 25-c-β 編集（残存 N+1 = 既存行 update / MLDO書込 をバッチ化）
 // .gs ファイル数: 1 件
 // 内訳:
 //   コード.js   (元: コード.gs)   1090 行 / 50428 bytes
@@ -267,6 +267,7 @@ function computeMldoForMonth(month) {
       var dateRange = reportSheet.getRange(dataRowStart, 1, dataRowCount, 1).getValues();
       var formulaRange = reportSheet.getRange(dataRowStart, 7, dataRowCount, 1).getFormulas();
       var valueRange = reportSheet.getRange(dataRowStart, 7, dataRowCount, 1).getValues();
+      var mldoWrites = []; // Phase 25-c-β: 書込対象セルを貯めて後段で連続グループ setValues
       for (var k = 0; k < dataRowCount; k++) {
         var cellDate = dateRange[k][0];
         if (!cellDate) continue;
@@ -286,12 +287,24 @@ function computeMldoForMonth(month) {
         var isEmpty = (curVal === '' || curVal === null || curVal === undefined);
 
         if (hasFormula || isEmpty) {
-          reportSheet.getRange(dataRowStart + k, 7).setValue(existingDates[cellDateStr]);
+          mldoWrites.push({ r: dataRowStart + k, v: existingDates[cellDateStr] });
           writtenToReport++;
         } else {
           // 既に固定値あり → 月1回ルール・手動修正保護のため上書きしない
           skippedLocked++;
         }
+      }
+      // Phase 25-c-β: MLDO 書込を G列の連続行グループ単位 setValues に集約（条件付き setValue ループの N+1 解消）。
+      // 書込対象セル（hasFormula||isEmpty のみ）は逐次版と厳密に同一。スキップ行（手動固定値・数式）は一切触れない。
+      mldoWrites.sort(function(a, b){ return a.r - b.r; });
+      var wi = 0;
+      while (wi < mldoWrites.length) {
+        var ws = wi, colVals = [[mldoWrites[wi].v]];
+        while (wi + 1 < mldoWrites.length && mldoWrites[wi+1].r === mldoWrites[wi].r + 1) {
+          wi++; colVals.push([mldoWrites[wi].v]);
+        }
+        reportSheet.getRange(mldoWrites[ws].r, 7, colVals.length, 1).setValues(colVals);
+        wi++;
       }
     }
 
@@ -711,14 +724,16 @@ function saveWeekData(data) {
       if(!(ik in indexMap))indexMap[ik]=ii+2;
     }
   }
-  var newRows=[];
+  var newRows=[],updates=[];
   for(var dc in days){var dd=days[dc]; if(!dd)continue; var dn=DAY_NAMES[dc]; if(!dn)continue;
     if(isWaterRecordEmpty(dd)){skipped++;continue;}
     var rv=[monthStr,parseInt(week),dn,toDateStr(dd.date)||''];
     for(var f in FIELD_MAP){var v=dd[f];rv.push(v!=null&&v!=undefined&&v!==''?v:'');} rv.push(now);
     var ri=indexMap[String(week)+'|'+String(dn).trim()];
-    if(ri){sheet.getRange(ri,1,1,rv.length).setValues([rv]);}else{newRows.push(rv);} cnt++;
+    if(ri){updates.push({r:ri,v:rv});}else{newRows.push(rv);} cnt++;
   }
+  // Phase 25-c-β: 既存行 update を連続グループ単位の setValues に集約（1行ごと setValues の N+1 解消）
+  flushRowUpdates(sheet,updates);
   // Phase 25-c-1a: 新規行は末尾へ1回の setValues でバッチ追加（appendRow 逐次の N+1 解消）
   if(newRows.length>0){
     var mr=sheet.getMaxRows();
@@ -754,13 +769,15 @@ function saveEquipmentData(data) {
       if(!(ik in indexMap))indexMap[ik]=ii+2;
     }
   }
-  var newRows=[];
+  var newRows=[],updates=[];
   for(var wn in eq){var wd=eq[wn]; for(var e=0;e<EQUIP_NAMES.length;e++){
     var ek=EQUIP_NAMES[e],el=EQUIP_LABELS[e],ed=wd[ek]; if(!ed)continue;
     var rv=[monthStr,parseInt(wn),el,ed.mon!=null?ed.mon:'',ed.tue!=null?ed.tue:'',ed.wed!=null?ed.wed:'',ed.thu!=null?ed.thu:'',ed.fri!=null?ed.fri:'',now];
     var ri=indexMap[String(parseInt(wn))+'|'+String(el).trim()];
-    if(ri){sheet.getRange(ri,1,1,rv.length).setValues([rv]);}else{newRows.push(rv);} cnt++;
+    if(ri){updates.push({r:ri,v:rv});}else{newRows.push(rv);} cnt++;
   }}
+  // Phase 25-c-β: 既存行 update を連続グループ単位の setValues に集約（1行ごと setValues の N+1 解消）
+  flushRowUpdates(sheet,updates);
   // Phase 25-c-1a: 新規行は末尾へ1回の setValues でバッチ追加（appendRow 逐次の N+1 解消）
   if(newRows.length>0){
     var mr=sheet.getMaxRows();
@@ -808,14 +825,16 @@ function saveElectricalData(data) {
       if(!(ik in indexMap))indexMap[ik]=ii+2;
     }
   }
-  var newRows=[];
+  var newRows=[],updates=[];
   for(var wn in el){var wd=el[wn]; for(var dc in wd){var dd=wd[dc]; if(!dd)continue;
     var dn=DAY_NAMES[dc]; if(!dn)continue;
     if(isElectricalRecordEmpty(dd)){skipped++;continue;}
     var rv=[monthStr,parseInt(wn),dn]; for(var f=0;f<ELEC_FIELDS.length;f++){var v=dd[ELEC_FIELDS[f]];rv.push(v!=null&&v!=undefined&&v!==''?v:'');} rv.push(now);
     var ri=indexMap[String(parseInt(wn))+'|'+String(dn).trim()];
-    if(ri){sheet.getRange(ri,1,1,rv.length).setValues([rv]);}else{newRows.push(rv);} cnt++;
+    if(ri){updates.push({r:ri,v:rv});}else{newRows.push(rv);} cnt++;
   }}
+  // Phase 25-c-β: 既存行 update を連続グループ単位の setValues に集約（1行ごと setValues の N+1 解消）
+  flushRowUpdates(sheet,updates);
   // Phase 25-c-1a: 新規行は末尾へ1回の setValues でバッチ追加（appendRow 逐次の N+1 解消）
   if(newRows.length>0){
     var mr=sheet.getMaxRows();
@@ -852,14 +871,16 @@ function saveMechanicalData(data) {
       if(!(ik in indexMap))indexMap[ik]=ii+2;
     }
   }
-  var newRows=[];
+  var newRows=[],updates=[];
   for(var wn in mech){var wd=mech[wn]; for(var dc in wd){var dd=wd[dc]; if(!dd)continue;
     var dn=DAY_NAMES[dc]; if(!dn)continue;
     if(isMechanicalRecordEmpty(dd)){skipped++;continue;}
     var js=JSON.stringify(dd),rv=[monthStr,parseInt(wn),dn,js,now];
     var ri=indexMap[String(parseInt(wn))+'|'+String(dn).trim()];
-    if(ri){sheet.getRange(ri,1,1,rv.length).setValues([rv]);}else{newRows.push(rv);} cnt++;
+    if(ri){updates.push({r:ri,v:rv});}else{newRows.push(rv);} cnt++;
   }}
+  // Phase 25-c-β: 既存行 update を連続グループ単位の setValues に集約（1行ごと setValues の N+1 解消）
+  flushRowUpdates(sheet,updates);
   // Phase 25-c-1a: 新規行は末尾へ1回の setValues でバッチ追加（appendRow 逐次の N+1 解消）
   if(newRows.length>0){
     var mr=sheet.getMaxRows();
@@ -1030,6 +1051,22 @@ function findRow(sheet,month,week,dayName) {
 function sortSheet(sheet) {
   var lr=sheet.getLastRow();if(lr<=2)return;
   sheet.getRange(2,1,lr-1,sheet.getLastColumn()).sort([{column:1,ascending:true},{column:2,ascending:true},{column:3,ascending:true}]);
+}
+// Phase 25-c-β: 既存行 update を「行オフセット連続グループ単位」の setValues に集約する共通ヘルパー。
+// updates = [{r: 絶対行番号, v: 行配列}, ...]。連続する r のみ1レンジに束ね、非連続は別レンジで書込む。
+// 書込むセル・値・型は1行ごと setValues と厳密に同一（スキップ行＝更新対象でない行には一切触れない）。
+function flushRowUpdates(sheet, updates) {
+  if (!updates || updates.length === 0) return;
+  updates.sort(function(a, b){ return a.r - b.r; });
+  var i = 0;
+  while (i < updates.length) {
+    var start = i, rows = [updates[i].v];
+    while (i + 1 < updates.length && updates[i+1].r === updates[i].r + 1) {
+      i++; rows.push(updates[i].v);
+    }
+    sheet.getRange(updates[start].r, 1, rows.length, rows[0].length).setValues(rows);
+    i++;
+  }
 }
 function jsonResponse(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
 
