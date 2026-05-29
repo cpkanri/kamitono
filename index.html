@@ -972,6 +972,15 @@ header > .conn-status {
   font-size: 12px;
   white-space: nowrap;
 }
+/* type=number のスピナー (↑↓) を全て非表示にして type=text と表示を揃える */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
 </style>
 </head>
 <body>
