@@ -17,7 +17,7 @@ var FIELD_MAP = {
   tempIn: 12, tempDitch: 13, tempOut: 14, transIn: 15, transOut: 16,
   phIn: 17, phDitch: 18, phOut: 19, sv10: 20, sv20: 21, sv30: 22, sv24h: 23,
   mlss: 24, sludgeLevel: 25, chlorine: 26, inspector: 27,
-  tempFinal: 29, transFinal: 30, phFinal: 31, bikou: 32,
+  tempFinal: 28, transFinal: 29, phFinal: 30, bikou: 31,
 };
 var DAY_NAMES = { mon: '月', tue: '火', wed: '水', thu: '木', fri: '金' };
 var DAY_REVERSE = { '月': 'mon', '火': 'tue', '水': 'wed', '木': 'thu', '金': 'fri' };
@@ -695,7 +695,7 @@ function getData(month) {
   var vals=sheet.getRange(2,1,lr-1,32).getValues(),result=[];
   for(var i=0;i<vals.length;i++){var row=vals[i]; if(matchMonth(row[0],month)){
     var rec={month:month,week:row[1],day:row[2],date:row[3]};
-    for(var f in FIELD_MAP){var v=row[FIELD_MAP[f]-1];rec[f]=(v===''||v===null)?null:v;} rec.updatedAt=row[27]; result.push(rec);
+    for(var f in FIELD_MAP){var v=row[FIELD_MAP[f]-1];rec[f]=(v===''||v===null)?null:v;} rec.updatedAt=row[31]; result.push(rec);
   }} return jsonResponse({data:result,month:month});
 }
 function isWaterRecordEmpty(dd) {
@@ -910,7 +910,7 @@ function getAllData(month) {
       var r={week:v[i][1],day:v[i][2],date:v[i][3]};
       var hasData=false;
       for(var f in FIELD_MAP){var val=v[i][FIELD_MAP[f]-1];r[f]=(val===''||val===null)?null:val;if(r[f]!==null) hasData=true;}
-      r.updatedAt=v[i][27];
+      r.updatedAt=v[i][31];
       if(hasData) result.water.push(r);
     }}}
   var es=ss.getSheetByName('機器運転時間');
