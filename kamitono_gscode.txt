@@ -1166,3 +1166,49 @@ function debugDumpWaterRaw(month) {
   Logger.log(out);                          // エディタ実行ログ
   return ContentService.createTextOutput(out);  // .getContent() で全文
 }
+
+// ============================================================================
+// 6月終沈 診断専用・READ-ONLY (2026-06-01 追加)。getValues と既存 getData の呼出のみ。
+// (a) 生セル col28-32 と (b) 修正後 getData の終沈読込を並べ、原因が SSデータ破損か
+// 配信コード旧版(redeploy未反映)かを切り分ける。SS 書込・行列変更・新規読込ロジックなし。
+// 実行は Yamane が editor で ▶ debugFinalJune → 実行ログ(Logger.log)を共有。
+// ============================================================================
+function debugFinalJune() {
+  var MONTH = '2026-06';
+
+  // (a) 生セル: 日常水質シートの col28-32 を 2026-06 の行だけ表示（月一致は getData と同じ matchMonth）
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('日常水質');
+  var lr = sh.getLastRow();
+  if (lr >= 2) {
+    var vals = sh.getRange(2, 1, lr - 1, 32).getValues();
+    Logger.log('=== (a) RAW col28-32  month=' + MONTH + ' ===');
+    for (var i = 0; i < vals.length; i++) {
+      var row = vals[i];
+      if (!matchMonth(row[0], MONTH)) continue; // col1=対象年月
+      Logger.log('R' + (i + 2) +
+        ' wk=' + row[1] + ' day=' + row[2] +
+        ' | 28:' + row[27] + ' | 29:' + row[28] + ' | 30:' + row[29] +
+        ' | 31:' + row[30] + ' | 32:' + row[31]);
+    }
+  }
+
+  // (b) 修正後 getData の終沈読込結果（同期/doGet が使う既存読込関数を呼ぶだけ）。
+  //   getData は jsonResponse(TextOutput) を返すため .getContent() を JSON.parse して data 配列を得る。
+  Logger.log('=== (b) getData parsed 終沈  month=' + MONTH + ' ===');
+  var recs = [];
+  try {
+    var resp = getData(MONTH);
+    var parsed = JSON.parse(resp.getContent());
+    recs = parsed.data || [];
+  } catch (e) {
+    Logger.log('getData parse error: ' + e);
+  }
+  recs.forEach(function (r) {
+    Logger.log('wk=' + r.week + ' day=' + r.day +
+      ' | tempFinal=' + r.tempFinal +
+      ' | transFinal=' + r.transFinal +
+      ' | phFinal=' + r.phFinal +
+      ' | bikou=' + r.bikou +
+      ' | updatedAt=' + r.updatedAt);
+  });
+}
