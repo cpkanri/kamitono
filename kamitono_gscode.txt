@@ -1137,3 +1137,32 @@ function pingTest() {
     Logger.log('エラー: ' + err.message);
   }
 }
+
+// ============================================================================
+// Phase 1 診断専用・READ-ONLY (2026-06-01 追加)。終沈/bikou 列ずれ＋6月汚染の裏取り用。
+// 日常水質シートのヘッダ(row1)と指定月の全行を生(getValues)で返す。
+// setValue/insertRows/deleteRows/sort/clear/migrate は一切しない。既存コードは無改変・追記のみ。
+// 実行は Yamane が editor で ▶ debugDumpWaterRaw('2026-06')。redeploy 不要(エディタ実行)。
+// 結果は実行ログ(Logger.log)、または戻り TextOutput を .getContent() で全文確認。
+// ============================================================================
+function debugDumpWaterRaw(month) {
+  var m = month || '2026-06';
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('日常水質');
+  var lr = sheet.getLastRow();
+  var header = sheet.getRange(1, 1, 1, 32).getValues()[0];       // 物理ヘッダ col1-32
+  var vals = sheet.getRange(2, 1, Math.max(lr - 1, 0), 32).getValues();
+  var rows = [];
+  for (var i = 0; i < vals.length; i++) {
+    if (matchMonth(vals[i][0], m)) {
+      // [行番号, 月, 週, 曜日, 日付, col5..col32 を index 付きで]
+      var cells = [];
+      for (var c = 0; c < 32; c++) cells.push(c + 1 + ':' + vals[i][c]);
+      rows.push('R' + (i + 2) + ' | ' + cells.join(' | '));
+    }
+  }
+  var out = '=== HEADER(col1-32) ===\n' + header.map(function(h, j){return (j+1)+':'+h;}).join(' | ')
+          + '\n=== ' + m + ' rows (' + rows.length + ') ===\n' + rows.join('\n');
+  Logger.log(out);                          // エディタ実行ログ
+  return ContentService.createTextOutput(out);  // .getContent() で全文
+}
