@@ -4225,6 +4225,19 @@ function setCell(ws, row, col, val) {
   }
 }
 
+// データセルをクリア（数式セルは保持して破壊しない）。
+// テンプレ(EXCEL_TEMPLATE_B64)に焼き込まれた旧月の実データ残留を、書込前に除去するための恒久防御。
+function clearDataCell(ws, row, col) {
+  const cell = ws.getCell(row, col);
+  // ExcelJS: 数式セルは type===Formula、または value が {formula} / {sharedFormula} オブジェクト
+  const isFormula =
+    (typeof ExcelJS !== "undefined" && cell.type === ExcelJS.ValueType.Formula) ||
+    (cell.value && typeof cell.value === "object" &&
+      (cell.value.formula != null || cell.value.sharedFormula != null));
+  if (isFormula) return;     // 数式は残す（offset31 塩素投入量行 J-N 等）
+  cell.value = null;         // 値セルはクリア
+}
+
 // ExcelJS 用の日付変換ヘルパー
 // JSの日付をExcelに書き込むときにタイムゾーンで -1日 ずれないようにする
 // UTC の 12:00 として書き込むことで、Excelは現地日付として正しく表示する
@@ -4346,6 +4359,23 @@ async function exportExcel() {
           wsWater.getCell(r, 9).value = null;
         }
       }
+
+      // ===== 日次データ行をクリア（テンプレ焼込み残留の除去・数式は保持） =====
+      // DATA_ROW_BASE=4, 週オフセット 0/46/92/138/184 → 各週 dataRowBase
+      const _WATER_DATA_BASE = [4, 50, 96, 142, 188];
+      // ITEM_OFFSETS の row オフセット（fillWaterSheet の ITEM_OFFSETS と完全一致させること）
+      const _WATER_ITEM_OFFSETS = [0,1,2,3,4,5,6, 10,11,12, 16,17, 21,22,23, 24,25,26,27, 28,29,30,31];
+      const _WATER_INSP_OFF = 9;    // inspector 行 = dataRowBase + 9（=13/59/105/151/197）
+      const _WATER_BIKOU_OFF = 32;  // 備考 行     = dataRowBase + 32
+      _WATER_DATA_BASE.forEach(function (base) {
+        _WATER_ITEM_OFFSETS.forEach(function (off) {
+          for (let c = 9; c <= 14; c++) clearDataCell(wsWater, base + off, c);
+        });
+        for (let c = 9; c <= 14; c++) {
+          clearDataCell(wsWater, base + _WATER_INSP_OFF, c);
+          clearDataCell(wsWater, base + _WATER_BIKOU_OFF, c);
+        }
+      });
     }
     // 水質管理報告 A列 日付参照
     const wsReport = wb.getWorksheet("水質管理報告");
@@ -4443,7 +4473,8 @@ async function exportExcel() {
       }
 
       // Phase 23-A 補追2: 終沈3列を localStorage から直接書込
-      // テンプレ E/Q (1/2 ページ) と D (2/2 ページ) は数式・値とも空（日常水質シートに終沈行が無く formula 不可）
+      // テンプレに5月の終沈(E20=6.67 等)が焼込まれているため、fillQualityReportFinalCols が
+      // 書込前に当該データセルをクリア(数式は保持)してから localStorage の値を書く。
       fillQualityReportFinalCols(wsReport, yyyy, mm, daysInMonth);
     }
 
@@ -4810,6 +4841,14 @@ function fillQualityReportFinalCols(ws, yyyy, mm, daysInMonth) {
   const _tempCol  = _writeMap.tempFinal.monthly.col;   // 期待値: 5 (page1 E列)
   const _phCol    = _writeMap.phFinal.monthly.col;     // 期待値: 17 (page1 Q列)
   const _transCol = _writeMap.transFinal.monthly.col;  // 期待値: 4 (page2 D列)
+
+  // ===== 終沈3列をクリア（テンプレ焼込み残留の除去・数式は保持） =====
+  // テンプレ(EXCEL_TEMPLATE_B64)は5月完成報告書まるごとで E20=6.67 等の終沈が焼込まれているため、
+  // 書込前に当該データセルをクリアする（旧コメント「数式・値とも空」は誤りだった）。
+  // E(_tempCol=5)/Q(_phCol=17) は 1/2ページ row8-38、D(_transCol=4) は 2/2ページ row49-79。
+  for (let r = 8; r <= 38; r++) { clearDataCell(ws, r, _tempCol); clearDataCell(ws, r, _phCol); }
+  for (let r = 49; r <= 79; r++) { clearDataCell(ws, r, _transCol); }
+
   // weeklyData を日付キーマップに展開
   const dateMap = {};
   for (let w = 1; w <= 5; w++) {
@@ -4847,6 +4886,11 @@ function fillEquipSheet(ws, yyyy, mm) {
   for (let w = 1; w <= 5; w++) {
     const base = WEEK_START[w];
     const wData = weeklyData.equipment[w];
+
+    // テンプレ焼込み残留クリア（数式保持）: 当週データ域 row=base+0..(EQUIP_KEYS.length-1), col=4-8
+    for (let i = 0; i < EQUIP_KEYS.length; i++) {
+      for (let c = 4; c <= 8; c++) clearDataCell(ws, base + i, c);
+    }
 
     // 日付ヘッダー設定（A列=対象月内の最初の日, F列=対象月内の最後の日、令和形式）
     const headerRow = DATE_HEADER_ROW[w];
@@ -4915,6 +4959,11 @@ function fillElecSheet(ws, yyyy, mm) {
     const base = WEEK_START[w];
     const headerRow = DATE_HEADER_ROW[w];
     const wData = weeklyData.electrical[w];
+
+    // テンプレ焼込み残留クリア（数式保持）: 当週データ域 row=base+OFFSETS[key], col=7-11
+    for (const _k in OFFSETS) {
+      for (let c = 7; c <= 11; c++) clearDataCell(ws, base + OFFSETS[_k], c);
+    }
 
     // 日付ヘッダー書き込み（対象月の日付のみ、月跨ぎ日はスキップ）
     for (const dk in DAY_COL) {
@@ -5012,6 +5061,11 @@ function fillMechSheet(ws, yyyy, mm) {
   for (let w = 1; w <= 5; w++) {
     const wk = MECH_WEEK[w];
     const wData = weeklyData.mechanical[w];
+
+    // テンプレ焼込み残留クリア（数式保持）: 1/2=MAP1[key]+p1, 2/2=MAP2[key]+p2-63, col=5/7/9/11/13
+    const _MECH_COLS = [5, 7, 9, 11, 13];
+    for (const _k in MAP1) { for (const _c of _MECH_COLS) clearDataCell(ws, MAP1[_k] + wk.p1, _c); }
+    for (const _k in MAP2) { for (const _c of _MECH_COLS) clearDataCell(ws, MAP2[_k] + wk.p2 - 63, _c); }
 
     // 日付ヘッダー書き込み（対象月の日付のみ、月跨ぎ日はスキップ）
     const headerRows = MECH_DATE_HEADER_ROWS[w] || [];
