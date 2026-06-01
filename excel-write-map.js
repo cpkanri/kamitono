@@ -16,8 +16,8 @@
  *  - MLDO 不含 (サーバー GAS 計算+書込)
  *  - storage_unit='region' 不在
  *
- * entry 数: 27 (= ALL_FIELDS)
- *  - 22 daily (日常水質シート、ITEM_OFFSETS と一致)
+ * entry 数: 28 (= ALL_FIELDS) ※ chlorineDose 追加 (塩素投入量 R35、_daily(31))
+ *  - 23 daily (日常水質シート、ITEM_OFFSETS と一致)
  *  - 3 monthly (終沈、water 管理報告シート、block 1/2 混在、null_skip=true)
  *  - 2 metadata (inspector/bikou、別経路書込、b3 では documentation only)
  *
@@ -99,6 +99,7 @@
     mlss:           _entry(_daily(28), null, false),
     sludgeLevel:    _entry(_daily(29), null, false),
     chlorine:       _entry(_daily(30), null, false),
+    chlorineDose:   _entry(_daily(31), null, false),
 
     // ----- 終沈 (3): 月一書込、Phase 23-A 補追2-b null skip 適用、block 1/2 混在 -----
     // page1 (row1 = 7+d): tempFinal E列, phFinal Q列

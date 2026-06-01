@@ -1247,6 +1247,11 @@ input[type="number"] {
       <span class="unit">mg/L</span>
       <input type="number" inputmode="decimal" step="0.1" data-field="chlorine">
     </div>
+    <div class="field">
+      <span class="label">塩素投入量</span>
+      <span class="unit">kg</span>
+      <input type="number" inputmode="decimal" step="0.1" data-field="chlorineDose">
+    </div>
   </div>
 
   <!-- セクション8: 備考 -->
@@ -1564,7 +1569,7 @@ const ALL_FIELDS = [
   "transIn", "transOut",
   "phIn", "phDitch", "phOut",
   "sv10", "sv20", "sv30", "sv24h",
-  "mlss", "sludgeLevel", "chlorine",
+  "mlss", "sludgeLevel", "chlorine", "chlorineDose",
   "tempFinal", "transFinal", "phFinal",
   "inspector", "bikou"
 ];
@@ -1574,7 +1579,7 @@ const COPY_FIELDS = [
   "transIn", "transOut",
   "phIn", "phDitch", "phOut",
   "sv10", "sv20", "sv30", "sv24h",
-  "mlss", "sludgeLevel", "chlorine",
+  "mlss", "sludgeLevel", "chlorine", "chlorineDose",
   "tempFinal", "transFinal", "phFinal"
 ];
 
@@ -4588,7 +4593,7 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
     transIn: 16, transOut: 17,
     phIn: 21, phDitch: 22, phOut: 23,
     sv10: 24, sv20: 25, sv30: 26, sv24h: 27,
-    mlss: 28, sludgeLevel: 29, chlorine: 30
+    mlss: 28, sludgeLevel: 29, chlorine: 30, chlorineDose: 31
   };
   // 第1週データRow=4, dateRow=3, inspectorRow=13 （各週+46オフセット）
   const DATA_ROW_BASE = 4;
