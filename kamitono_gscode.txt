@@ -706,15 +706,18 @@ function isWaterRecordEmpty(dd) {
   }
   return true;
 }
-function saveWeekData(data) {
-  var month=data.month,week=data.week,days=data.days;
-  if(!month||!week||!days) return jsonResponse({error:'パラメータ不足'});
+// Phase 25-d: 水質 全週1パスのコア。旧 saveAllData の「週ごと saveWeekData 反復」
+// (= setNumberFormat / 索引 getValues / sortSheet / 書込が週数分反復する週単位 N+1) を解消し、
+// 索引マップ・getValues・flushRowUpdates・setNumberFormat・sortSheet を各 1 回に集約する。
+// 行配列(rv)の構築・FIELD_MAP 列マッピング・updatedAt 列は完全不変。手本: saveEquipmentData / kake saveWaterWeeks。
+function saveWaterWeeks(data) {
+  var month=data.month,weeks=data.weeks;
+  if(!month||!weeks) return jsonResponse({error:'パラメータ不足'});
   var ss=SpreadsheetApp.getActiveSpreadsheet(),sheet=ss.getSheetByName('日常水質'),now=new Date(),cnt=0,skipped=0;
-  // A列の自動Date変換を防ぐためプレーンテキスト書式に固定
+  // A列の自動Date変換を防ぐためプレーンテキスト書式に固定（全週で1回）
   sheet.getRange('A:A').setNumberFormat('@');
   var monthStr=String(month);
-  // Phase 25-c-1a: 索引マップを1回の getValues で事前構築（findRow 毎回全件読込の N+1 解消）。
-  // matchMonth で当月行のみ採用 → キーは week|day。重複行は先勝ち（findRow と同挙動）。
+  // 索引マップを1回の getValues で事前構築。matchMonth で当月行のみ採用 → キーは week|day。先勝ち。
   var lr=sheet.getLastRow(),indexMap={};
   if(lr>=2){
     var idx=sheet.getRange(2,1,lr-1,3).getValues();
@@ -725,29 +728,36 @@ function saveWeekData(data) {
     }
   }
   var newRows=[],updates=[];
-  for(var dc in days){var dd=days[dc]; if(!dd)continue; var dn=DAY_NAMES[dc]; if(!dn)continue;
-    if(isWaterRecordEmpty(dd)){skipped++;continue;}
-    var rv=[monthStr,parseInt(week),dn,toDateStr(dd.date)||''];
-    for(var f in FIELD_MAP){var v=dd[f];rv.push(v!=null&&v!=undefined&&v!==''?v:'');} rv.push(now);
-    var ri=indexMap[String(week)+'|'+String(dn).trim()];
-    if(ri){updates.push({r:ri,v:rv});}else{newRows.push(rv);} cnt++;
+  for(var wn in weeks){var days=weeks[wn]; if(!days)continue;
+    for(var dc in days){var dd=days[dc]; if(!dd)continue; var dn=DAY_NAMES[dc]; if(!dn)continue;
+      if(isWaterRecordEmpty(dd)){skipped++;continue;}
+      var rv=[monthStr,parseInt(wn),dn,toDateStr(dd.date)||''];
+      for(var f in FIELD_MAP){var v=dd[f];rv.push(v!=null&&v!=undefined&&v!==''?v:'');} rv.push(now);
+      var ri=indexMap[String(parseInt(wn))+'|'+String(dn).trim()];
+      if(ri){updates.push({r:ri,v:rv});}else{newRows.push(rv);} cnt++;
+    }
   }
-  // Phase 25-c-β: 既存行 update を連続グループ単位の setValues に集約（1行ごと setValues の N+1 解消）
+  // 既存行 update を連続グループ単位の setValues に集約（1回）
   flushRowUpdates(sheet,updates);
-  // Phase 25-c-1a: 新規行は末尾へ1回の setValues でバッチ追加（appendRow 逐次の N+1 解消）
+  // 新規行は末尾へ1回の setValues でバッチ追加
   if(newRows.length>0){
     var mr=sheet.getMaxRows();
     if(mr<lr+newRows.length)sheet.insertRowsAfter(mr,lr+newRows.length-mr);
     sheet.getRange(lr+1,1,newRows.length,newRows[0].length).setValues(newRows);
   }
-  sortSheet(sheet);
+  sortSheet(sheet);   // 全週で1回
   return jsonResponse({status:'ok',message:'水質'+cnt+'日分保存',savedCount:cnt,skippedCount:skipped});
 }
+// saveWeek action 用：単一週を全週形 {[week]:days} に包んで saveWaterWeeks へ委譲（後方互換・戻り値保持）
+function saveWeekData(data) {
+  var month=data.month,week=data.week,days=data.days;
+  if(!month||!week||!days) return jsonResponse({error:'パラメータ不足'});
+  var weeks={}; weeks[week]=days;
+  return saveWaterWeeks({month:month,weeks:weeks,startDate:data.startDate});
+}
+// saveAll action / 一括保存オーケストレータ用：全週を1パスで処理
 function saveAllData(data) {
-  var month=data.month,weeks=data.weeks; if(!month||!weeks) return jsonResponse({error:'パラメータ不足'});
-  var t=0,sk=0; for(var wn in weeks){var r=saveWeekData({month:month,week:parseInt(wn),startDate:data.startDate,days:weeks[wn]});
-    var p=JSON.parse(r.getContent()); if(p.savedCount) t+=p.savedCount; if(p.skippedCount) sk+=p.skippedCount;}
-  return jsonResponse({status:'ok',message:'水質'+t+'日分保存',savedCount:t,skippedCount:sk});
+  return saveWaterWeeks(data);
 }
 
 // ===== 機器運転時間 =====
