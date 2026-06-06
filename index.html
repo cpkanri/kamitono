@@ -3064,21 +3064,34 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
+// 横展開②(2026-06-06): 上殿は「放流(discharge)のみ」祝日ブランク対象。
+// 返送汚泥(returnSludge)/余剰汚泥(excessSludge)は祝日休みでも書込・送信する（運用差・最重要）。
+const KAMITONO_HOLIDAY_BLANK_KEYS = ['discharge'];
+
 // Phase 15: 水質1週分のデータ送信用に nextMon → fri キー変換
 // GAS の DAY_NAMES/DAY_COLUMNS は 'fri' を想定するため、内部キー 'nextMon' を 'fri' に変換して送信する
 function buildWaterDaysPayload(weekData) {
   const days = {};
   if (!weekData) return days;
+  // 横展開② B2: 祝日の discharge のみ保存ペイロードから除外（B1 出力空欄と対称）。
+  // キャッシュ空/失効時 (holSet 空・day.date 無) は従来挙動フォールバックで悪化させない。
+  const holSet = (typeof getHolidaySetFromCache === 'function') ? getHolidaySetFromCache() : null;
   Object.keys(weekData).forEach(function(appKey) {
     const src = weekData[appKey];
     if (!src) return;
     const gasKey = (appKey === "nextMon") ? "fri" : appKey;
     // Phase 18-b-2: 送信前に bikou を sanitize（ISO タイムスタンプの再循環を断つ）
+    let out;
     if (typeof src === 'object' && 'bikou' in src) {
-      days[gasKey] = Object.assign({}, src, { bikou: sanitizeBikou(src.bikou) });
+      out = Object.assign({}, src, { bikou: sanitizeBikou(src.bikou) });
     } else {
-      days[gasKey] = src;
+      out = src;
     }
+    if (holSet && src && src.date && holSet.has(src.date)) {
+      out = Object.assign({}, out); // src(=live weeklyData) を破壊しないよう複製してから除外
+      KAMITONO_HOLIDAY_BLANK_KEYS.forEach(function(k){ delete out[k]; });
+    }
+    days[gasKey] = out;
   });
   return days;
 }
@@ -4743,11 +4756,18 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
       const dataKey = APP_KEY_MAP[dk];
       const day = weeklyData.weeks[w] && weeklyData.weeks[w][dataKey];
       if (!day) continue;
+      // 横展開② B1: 祝日は放流(discharge)のみ空欄化。返送/余剰は祝日でも従来どおり書込。
+      const _dkDate = getActualDate(w, dk);
+      const _isHol = !!(_dkDate && holidaySet.has(dateToStr(_dkDate)));
       for (const key in ITEM_OFFSETS) {
         const row = dataRowBase + ITEM_OFFSETS[key];
-        const v = day[key];
         // 積算値テーブルの項目はI列起点、測定場所テーブルの項目はJ列起点
         const targetCol = RUISAN_KEYS.indexOf(key) >= 0 ? colRuisan : colMeasure;
+        if (_isHol && KAMITONO_HOLIDAY_BLANK_KEYS.indexOf(key) >= 0) {
+          ws.getCell(row, targetCol).value = null; // 祝日: 放流のみ空欄（setCell は null skip のため明示クリア）
+          continue;
+        }
+        const v = day[key];
         setCell(ws, row, targetCol, v);
       }
       // 測定者: 測定場所テーブル所属なのでJ列起点
