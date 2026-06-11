@@ -4253,10 +4253,11 @@ function clearDataCell(ws, row, col) {
 
 // ExcelJS 用の日付変換ヘルパー
 // JSの日付をExcelに書き込むときにタイムゾーンで -1日 ずれないようにする
-// UTC の 12:00 として書き込むことで、Excelは現地日付として正しく表示する
 function toExcelDate(date) {
   if (!date) return null;
-  return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0));
+  // 2026-06-12: 正午(12:00)→0:00 に変更。祝日リスト(0:00シリアル)との COUNTIF 完全一致を成立させる。
+  // ExcelJS は UTC 基準でシリアル化するため Date.UTC の 0:00 は整数シリアルになり日付表示は不変。
+  return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
 }
 
 // 祝日リストシートから祝日の Set（YYYY-MM-DD文字列）を取得
@@ -4489,6 +4490,9 @@ async function exportExcel() {
       // テンプレに5月の終沈(E20=6.67 等)が焼込まれているため、fillQualityReportFinalCols が
       // 書込前に当該データセルをクリア(数式は保持)してから localStorage の値を書く。
       fillQualityReportFinalCols(wsReport, yyyy, mm, daysInMonth);
+
+      // 2026-06-12: 列内 numFmt 統一（テンプレの 数値/標準 混在による右端ズレ解消）
+      normalizeReportNumFmt(wb);
     }
 
     // 運転管理月報 A6-A36
@@ -4875,6 +4879,32 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
   }
 }
 
+// ===== 水質管理報告: 列内 numFmt 統一（テンプレの 数値/標準 混在による右端ズレ解消）=====
+// 2026-06-12: テンプレ焼込みの numFmt が行ごとに不揃い（数値/標準 混在、末尾余白 `_)` 有無）のため
+// 同一列内で数値の右端が揃わない。テンプレは再生成せず出力時に列単位で統一する。
+// 対象外（変更禁止）: C/D/E/G 列、(1/2) の水温・外観・臭気列、L/N 列等の欄外セル、集計行。
+function normalizeReportNumFmt(wb) {
+  const ws = wb.getWorksheet("水質管理報告");
+  if (!ws) return;
+  const SPECS = [
+    // (1/2) PH 4列: O(15) P(16) Q(17) R(18)
+    { r0: 8,  r1: 38, cols: [15, 16, 17, 18], fmt: '0.00_);[Red]\\(0.00\\)' },
+    // (2/2) MLSS F(6) / SV30 H(8): 整数（透視度 D/E と同一書式に統一）
+    { r0: 49, r1: 79, cols: [6, 8],           fmt: '0_);[Red]\\(0\\)' },
+    // (2/2) 残留塩素 I(9): 小数1桁（透視度 C と同一書式）
+    { r0: 49, r1: 79, cols: [9],              fmt: '0.0_);[Red]\\(0.0\\)' }
+  ];
+  SPECS.forEach(function (s) {
+    for (let r = s.r0; r <= s.r1; r++) {
+      s.cols.forEach(function (c) {
+        const cell = ws.getCell(r, c);
+        // ExcelJS は共有 style を破壊的に書き換えるため、新しい style オブジェクトを割当てる
+        cell.style = Object.assign({}, cell.style, { numFmt: s.fmt });
+      });
+    }
+  });
+}
+
 // Phase 23-A 補追2: 水質管理報告シートの終沈3列のみ直接書込
 // テンプレ仕様: 流入/ディッチ/放流は 日常水質 シート参照の数式で埋まるが、
 // 終沈は 日常水質 に行が無く数式も無いため空のまま。localStorage から直接書く。
@@ -5171,6 +5201,29 @@ function fillMechSheet(ws, yyyy, mm) {
       }
     }
   }
+
+  // ===== W1 点検者数式の補完（テンプレ Row2/65 に数式が存在しないため出力時に生成）=====
+  // 点検者名はハードコードせず W2(1/2) E127 のテンプレ数式 ,"","<名前>") から抽出。抽出失敗時はスキップ。
+  try {
+    var refV = ws.getCell(127, 5).value; // W2(1/2) E127 のテンプレ数式
+    var refF = refV && typeof refV === "object" ? refV.formula : null;
+    var nameM = refF ? refF.match(/,\s*""\s*,\s*"([^"]+)"\s*\)\s*$/) : null;
+    if (nameM) {
+      var inspName = nameM[1];
+      var COLS_L = { 5: "E", 7: "G", 9: "I", 11: "K", 13: "M" };
+      [[2, 3], [65, 66]].forEach(function (pair) { // [点検者行, 日付ヘッダ行] = W1 の 1/2・2/2
+        var inspRow = pair[0], dateRow = pair[1];
+        [5, 7, 9, 11, 13].forEach(function (c) {
+          var L = COLS_L[c];
+          ws.getCell(inspRow, c).value = {
+            formula: 'IF(OR(' + L + dateRow + '="",COUNTIF(祝日リスト!$A:$A,' + L + dateRow + ')>0),"","' + inspName + '")'
+          };
+        });
+      });
+    } else {
+      console.warn("機械設備W1点検者: テンプレW2数式から名前を抽出できず、補完をスキップ");
+    }
+  } catch (e) { console.warn("機械設備W1点検者補完エラー:", e); }
 }
 
 
