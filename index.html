@@ -4242,6 +4242,10 @@ function setCell(ws, row, col, val) {
 // テンプレ(EXCEL_TEMPLATE_B64)に焼き込まれた旧月の実データ残留を、書込前に除去するための恒久防御。
 function clearDataCell(ws, row, col) {
   const cell = ws.getCell(row, col);
+  // 2026-06-12: 結合セルのスレーブはクリアしない。ExcelJS は書込がマスターへ伝播するため、
+  // 範囲外マスターのラベルを破壊してしまう（例: 日常水質 備考行 A36:R36 — J36 への null 書込で
+  // A36 の「備考」ラベルが消える）。マスターがクリア範囲内にある実データセルは従来どおりクリアされる。
+  if (cell.isMerged && cell.master.address !== cell.address) return;
   // ExcelJS: 数式セルは type===Formula、または value が {formula} / {sharedFormula} オブジェクト
   const isFormula =
     (typeof ExcelJS !== "undefined" && cell.type === ExcelJS.ValueType.Formula) ||
@@ -4377,15 +4381,21 @@ async function exportExcel() {
       // ===== 日次データ行をクリア（テンプレ焼込み残留の除去・数式は保持） =====
       // DATA_ROW_BASE=4, 週オフセット 0/46/92/138/184 → 各週 dataRowBase
       const _WATER_DATA_BASE = [4, 50, 96, 142, 188];
-      // ITEM_OFFSETS の row オフセット（fillWaterSheet の ITEM_OFFSETS と完全一致させること）
-      const _WATER_ITEM_OFFSETS = [0,1,2,3,4,5,6, 10,11,12, 16,17, 21,22,23, 24,25,26,27, 28,29,30,31];
+      // 積算テーブル行（offset 0-6）: I〜N(9-14)。I列=月曜データ列のためクリア対象。
+      const _WATER_RUISAN_OFFSETS = [0, 1, 2, 3, 4, 5, 6];
+      // 測定テーブル行（offset 10以降）: J〜N(10-14)。
+      // I列(9)は「測定場所」ラベル列（流入/ディッチ/放流/測定者 等）のため絶対にクリアしない。
+      const _WATER_MEASURE_OFFSETS = [10,11,12, 16,17, 21,22,23, 24,25,26,27, 28,29,30,31];
       const _WATER_INSP_OFF = 9;    // inspector 行 = dataRowBase + 9（=13/59/105/151/197）
       const _WATER_BIKOU_OFF = 32;  // 備考 行     = dataRowBase + 32
       _WATER_DATA_BASE.forEach(function (base) {
-        _WATER_ITEM_OFFSETS.forEach(function (off) {
+        _WATER_RUISAN_OFFSETS.forEach(function (off) {
           for (let c = 9; c <= 14; c++) clearDataCell(wsWater, base + off, c);
         });
-        for (let c = 9; c <= 14; c++) {
+        _WATER_MEASURE_OFFSETS.forEach(function (off) {
+          for (let c = 10; c <= 14; c++) clearDataCell(wsWater, base + off, c);
+        });
+        for (let c = 10; c <= 14; c++) {
           clearDataCell(wsWater, base + _WATER_INSP_OFF, c);
           clearDataCell(wsWater, base + _WATER_BIKOU_OFF, c);
         }
@@ -4458,7 +4468,7 @@ async function exportExcel() {
   } catch (e) { console.error("fillWaterSheet:", e); }
 
   try { const wsEq = wb.getWorksheet("機器運転時間"); if (wsEq) fillEquipSheet(wsEq, yyyy, mm); } catch (e) { console.error("fillEquipSheet:", e); }
-  try { const wsEl = wb.getWorksheet("日常電気設備"); if (wsEl) fillElecSheet(wsEl, yyyy, mm); } catch (e) { console.error("fillElecSheet:", e); }
+  try { const wsEl = wb.getWorksheet("日常電気設備"); if (wsEl) fillElecSheet(wsEl, yyyy, mm, holidaySet); } catch (e) { console.error("fillElecSheet:", e); }
   try { const wsMe = wb.getWorksheet("日常機械設備"); if (wsMe) fillMechSheet(wsMe, yyyy, mm); } catch (e) { console.error("fillMechSheet:", e); }
 
   // 水質管理報告と運転管理月報の日付列（A列）に日次日付を書き込み
@@ -4714,6 +4724,26 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
     return v !== null && v !== undefined && v !== "";
   });
 
+  // ===== 塩素投入量行（offset 31）: テンプレ数式の 0 表示と1列ズレを修正 =====
+  // 旧テンプレ式: =IFERROR(INDEX(運転管理月報!F$6:F$36,MATCH(J3,...)),0)
+  //   問題1: IFERROR フォールバックが 0（未点検日に 0 が出る）
+  //   問題2: INDEX が空セル参照でも 0 を返す（月報F列は手入力欄で通常空）
+  //   問題3: MATCH 参照が1列ズレ（J列=月曜なのに J3=火曜日付を参照）
+  // 新式: 同列 Row12（J12='=I3' 等、正しい曜日の日付）を参照し、ISBLANK で空欄化。
+  // データ書込ループより前に実行（値入力日はループの setCell が数式を上書き＝従来どおり値優先）。
+  for (let w = 1; w <= 5; w++) {
+    const off = WEEK_OFFSETS[w];
+    const chlorRow = DATA_ROW_BASE + off + 31; // 35 / 81 / 127 / 173 / 219
+    const hdrRow = 12 + off;                   // 12 / 58 / 104 / 150 / 196
+    ["J", "K", "L", "M", "N"].forEach(function (colL, i) {
+      const ref = colL + hdrRow;
+      const idx = 'INDEX(運転管理月報!F$6:F$36,MATCH(' + ref + ',運転管理月報!$A$6:$A$36,0))';
+      ws.getCell(chlorRow, 10 + i).value = {
+        formula: 'IFERROR(IF(ISBLANK(' + idx + '),"",' + idx + '),"")'
+      };
+    });
+  }
+
   for (let w = 1; w <= 5; w++) {
     const offset = WEEK_OFFSETS[w];
     const dateRow = DATE_ROW_BASE + offset;
@@ -4805,76 +4835,31 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
     }
   }
 
-  // ===== O列（種別A 4項目の期間平均/日消費量）を JS で計算して書込（Phase 27-d）=====
-  // テンプレ v6 で種別A 20セル（O4/5/6/10 ＋各週 +46offset）の O列数式を空セル化したため、
-  // ここで値を直接書く。Excel 数式（Phase 27-c）が実機で空セル判定に失敗したための方針転換。
-  //   通常週: I列(月曜reading)起点。 num=(終点reading - 月曜値), den=(終点日 - 月曜日)
-  //   祝日週(I列=空): J:N範囲の最初の非空reading起点。 num/den とも J:N の最初〜最後で算出
-  //   終点reading は常に J:N（火〜金 ＋ N列=翌週初日reading）の最後の非空値
+  // ===== O列（種別A 4項目）: kake 稼働実績のあるレート式を書込（Phase 27-d 値直書きの数式化）=====
+  // 期間平均 = (最後の非空reading − 最初の非空reading) / (対応日付差)。値域 I:N、日付域 I:N(dateRow)。
+  // W1 で I列に前月最終点検日 reading が入っている場合はそこが起点になる（旧JS実装は J:N 内のみ
+  // だったため、W1 の値が前月末起点のより正確な日割りに変わる＝意図された挙動変化）。
+  // 丸めは旧テンプレ/JS と同じ有効桁: ROUND(val, MAX(2,-INT(LOG10(ABS(val)))))。val=0 は 0 表示。
+  // reading 1点以下・全空は IFERROR/DIV0 経由で空欄。
   // 種別B 3項目(diesel/returnSludge/excessSludge)はテンプレ AVERAGEIF 維持のため触らない。
   const O_COL = 15;
-  const AVG_METER_KEYS = ["power200v", "power100v", "water", "discharge"];
-  const JM_DAY_KEYS = ["tue", "wed", "thu", "fri"]; // J/K/L/M列。N列は翌週初日readingで別途追加
+  const AVG_METER_OFFSETS = { power200v: 0, power100v: 1, water: 2, discharge: 6 };
   for (let w = 1; w <= 5; w++) {
-    const week = weeklyData.weeks && weeklyData.weeks[w];
-    if (!week) continue;
-    const dataRowBase = DATA_ROW_BASE + WEEK_OFFSETS[w];
-    // N列（翌週初日reading）の日付と複製元データを特定（Phase 26-b の N列複製と同方式）
-    const nextWorkday = getNextWeekFirstWorkday(getActualDate(w, "fri"), holidaySet);
-    const nextDay = nextWorkday
-      ? ((w < 5) ? thisMonthDateMap[dateToStr(nextWorkday)] : nextMonthDateMap[dateToStr(nextWorkday)])
-      : null;
-
-    for (const key of AVG_METER_KEYS) {
-      const itemRow = dataRowBase + ITEM_OFFSETS[key];
-      // J〜M（火〜金）＋ N（翌週初日reading）の reading 値・日付を非空・数値のみ収集
-      const readings = [];
-      for (const dk of JM_DAY_KEYS) {
-        const day = week[APP_KEY_MAP[dk]];
-        const v = day ? day[key] : undefined;
-        const d = getActualDate(w, dk);
-        if (v !== null && v !== undefined && v !== "" && d && !isNaN(Number(v))) {
-          readings.push({ value: Number(v), date: d });
-        }
-      }
-      if (nextDay && nextWorkday) {
-        const nv = nextDay[key];
-        if (nv !== null && nv !== undefined && nv !== "" && !isNaN(Number(nv))) {
-          readings.push({ value: Number(nv), date: nextWorkday });
-        }
-      }
-      if (readings.length < 1) continue; // reading 無し → O列は空のまま
-
-      // I列値 = 月曜reading（テンプレ I列セルは読まず weeklyData から取得）。空なら祝日週。
-      const monDay = week[APP_KEY_MAP["mon"]];
-      const iRaw = monDay ? monDay[key] : undefined;
-      const hasI = (iRaw !== null && iRaw !== undefined && iRaw !== "" && !isNaN(Number(iRaw)));
-      const iDate = getActualDate(w, "mon");
-
-      const last = readings[readings.length - 1];
-      let num, den;
-      if (hasI && iDate) {
-        // 通常週: I列(月曜)起点
-        num = last.value - Number(iRaw);
-        den = (last.date - iDate) / 86400000;
-      } else {
-        // 祝日週: J:N の最初の非空 reading 起点（差分計算に2点必要）
-        if (readings.length < 2) continue;
-        const first = readings[0];
-        num = last.value - first.value;
-        den = (last.date - first.date) / 86400000;
-      }
-      if (!den || isNaN(num) || isNaN(den)) continue; // 0除算・NaN回避
-
-      const avg = num / den;
-      if (avg === 0) {
-        setCell(ws, itemRow, O_COL, 0);
-      } else {
-        // 既存数式 ROUND(val, MAX(2,-INT(LOG10(ABS(val))))) と同じ有効桁数で丸め
-        const digits = Math.max(2, -Math.floor(Math.log10(Math.abs(avg))));
-        const factor = Math.pow(10, digits);
-        setCell(ws, itemRow, O_COL, Math.round(avg * factor) / factor);
-      }
+    const off = WEEK_OFFSETS[w];
+    const dr = DATE_ROW_BASE + off; // 日付行
+    for (const key in AVG_METER_OFFSETS) {
+      const r = DATA_ROW_BASE + off + AVG_METER_OFFSETS[key];
+      const vr = 'I' + r + ':N' + r;
+      const drr = 'I' + dr + ':N' + dr;
+      const firstPos = 'MATCH(TRUE,INDEX((' + vr + '<>""),0),0)';
+      const lastVal = 'LOOKUP(2,1/(' + vr + '<>""),' + vr + ')';
+      const firstVal = 'INDEX(' + vr + ',' + firstPos + ')';
+      const lastDate = 'LOOKUP(2,1/(' + vr + '<>""),' + drr + ')';
+      const firstDate = 'INDEX(' + drr + ',' + firstPos + ')';
+      const raw = '(' + lastVal + '-' + firstVal + ')/(' + lastDate + '-' + firstDate + ')';
+      ws.getCell(r, O_COL).value = {
+        formula: 'IFERROR(IF(' + raw + '=0,0,ROUND(' + raw + ',MAX(2,-INT(LOG10(ABS(' + raw + ')))))),"")'
+      };
     }
   }
 }
@@ -5018,7 +5003,8 @@ function fillEquipSheet(ws, yyyy, mm) {
 // 電気設備シート（週開始行: 3, 37, 71, 105, 139 / 月=G=7〜金=K=11）
 // ※対象月内の日付のみ書き込み（月跨ぎ日はスキップ）
 // ※日付ヘッダー：各週の Row2, 36, 70, 104, 138 の G〜K列（月〜金）に対象月のみ
-function fillElecSheet(ws, yyyy, mm) {
+function fillElecSheet(ws, yyyy, mm, holidaySet) {
+  holidaySet = holidaySet || new Set();
   const WEEK_START = { 1: 3, 2: 37, 3: 71, 4: 105, 5: 139 };
   const DAY_COL = { mon: 7, tue: 8, wed: 9, thu: 10, fri: 11 };
   // 日付ヘッダー行: 各週の開始行の1つ上
@@ -5062,14 +5048,27 @@ function fillElecSheet(ws, yyyy, mm) {
       cell.numFmt = 'd"日("aaa")"';
     }
 
-    if (!wData) continue;
+    // 祝日・未点検日の列は base+0〜base+31 全行（テンプレ数式行 base+14 含む）を空欄化する。
+    //   - 祝日: 運用上点検なし（横展開②B1 と整合）。保存済みの「-」や 0 も出力しない。
+    //   - 実質データ無し（全項目が 空 or "-"）: テンプレ数式行(base+14)が日常水質の空セルを
+    //     INDEX 参照して 0 を表示するのを防ぐ。
+    // ※対象月外の列は従来どおり何もしない（日付ヘッダ側で月跨ぎ処理済み）。
+    // ※"-"(半角)と"ー"(全角長音)の両方を実質空として扱う（Phase 22 UIハイフン統一の経緯）。
     for (const dk in DAY_COL) {
       const actual = getActualDate(w, dk);
       if (!actual) continue;
       if (actual.getFullYear() !== yyyy || (actual.getMonth() + 1) !== mm) continue;
       const col = DAY_COL[dk];
-      const day = wData[dk];
-      if (!day) continue;
+      const day = wData ? wData[dk] : null;
+      const isHol = holidaySet.has(dateToStr(actual));
+      const hasRealData = !!day && Object.keys(OFFSETS).some(function (key) {
+        const v = day[key];
+        return v !== null && v !== undefined && v !== "" && v !== "-" && v !== "ー";
+      });
+      if (isHol || !hasRealData) {
+        for (let r = base + 0; r <= base + 31; r++) ws.getCell(r, col).value = null;
+        continue;
+      }
       for (const key in OFFSETS) {
         setCell(ws, base + OFFSETS[key], col, day[key]);
       }
