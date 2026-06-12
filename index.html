@@ -4819,14 +4819,39 @@ function fillWaterSheet(ws, yyyy, mm, holidaySet) {
       if (day.inspector) setCell(ws, inspRow, colMeasure, day.inspector);
     }
 
-    // 備考（Row = dataRowBase + 32）: 測定場所テーブル所属なのでJ列起点
+    // ===== 備考: テンプレ構造が週ごとに異なるため出力先を分岐（2026-06-12 v86）=====
+    // W2: 行 dataRowBase+32 (=82) に非結合の曜日別セル → 従来どおり J〜N へ曜日別書込。
+    // W1/W3/W4/W5: 同行はラベル「備考」の全幅結合行（書くとマスター伝播でラベル破壊）→
+    //   直下の結合テキスト域マスター（行 dataRowBase+33 = 37/129/175/221、A列）へ
+    //   「M/d(曜): 本文」を改行連結で書く。ラベル行には一切書かない。
     const bikouRow = dataRowBase + 32;
-    for (const dk in DAY_COL_MEASURE) {
-      const col = DAY_COL_MEASURE[dk];
-      const dataKey = APP_KEY_MAP[dk];
-      const day = weeklyData.weeks[w] && weeklyData.weeks[w][dataKey];
-      if (day && day.bikou) {
-        setCell(ws, bikouRow, col, day.bikou);
+    if (w === 2) {
+      for (const dk in DAY_COL_MEASURE) {
+        const col = DAY_COL_MEASURE[dk];
+        const dataKey = APP_KEY_MAP[dk];
+        const day = weeklyData.weeks[w] && weeklyData.weeks[w][dataKey];
+        if (day && day.bikou) setCell(ws, bikouRow, col, day.bikou);
+      }
+    } else {
+      const noteCell = ws.getCell(bikouRow + 1, 1); // テキスト域マスター A37/A129/A175/A221
+      noteCell.value = null; // テンプレ焼込残留のクリア（毎回）
+      const lines = [];
+      const WD_JP = ["日", "月", "火", "水", "木", "金", "土"];
+      for (const dk of ["mon", "tue", "wed", "thu", "fri"]) {
+        const dataKey = APP_KEY_MAP[dk];
+        const day = weeklyData.weeks[w] && weeklyData.weeks[w][dataKey];
+        if (!day || !day.bikou) continue;
+        const d = getActualDate(w, dk);
+        const label = d ? (d.getMonth() + 1) + "/" + d.getDate() + "(" + WD_JP[d.getDay()] + ")" : "";
+        lines.push(label ? label + ": " + day.bikou : String(day.bikou));
+      }
+      if (lines.length) {
+        noteCell.value = lines.join("\n");
+        // 改行表示のため wrapText を付与（既存スタイルを保持しつつ新オブジェクト割当）
+        noteCell.style = Object.assign({}, noteCell.style, {
+          alignment: Object.assign({}, (noteCell.style && noteCell.style.alignment) || {},
+                                   { wrapText: true, vertical: "top" })
+        });
       }
     }
 
