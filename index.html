@@ -660,23 +660,15 @@ body.login-active {
   font-family: inherit;
   white-space: nowrap;                 /* v2.1 */
 }
-/* 強制更新ボタン */
+/* 強制更新ボタン（v2.2: 旧 小型単独ボタン時代のルール残存を除去し、他4アプリと同形=背景ティントのみに） */
 #btnForceRefresh {
-  background: rgba(255,180,80,0.35);
-  color: white;
-  border: 1px solid rgba(255,255,255,0.3);
-  border-radius: 4px;
-  padding: 3px 8px;
-  font-size: 11px;
-  cursor: pointer;
-  font-family: inherit;
-  margin-right: 6px;
+  background: rgba(255,180,80,0.25);
 }
 #btnForceRefresh:hover {
-  background: rgba(255,180,80,0.55);
+  background: rgba(255,180,80,0.4);
 }
 #btnForceRefresh.refreshing {
-  background: rgba(255,180,80,0.7);
+  background: rgba(255,180,80,0.6);
   animation: pulse-refresh 1s infinite;
 }
 @keyframes pulse-refresh {
@@ -758,14 +750,7 @@ body.login-active {
   white-space: nowrap;
 }
 
-/* ヘッダーアクションボタン横一列 */
-/* Phase 11-F-CSS-2: 4 ボタン (更新/同期/履歴/Excel) を 1 行に収めるため 4 列に */
-.header-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr;
-  gap: 8px;
-  margin-top: 12px;
-}
+/* （旧 .header-actions 4ボタン横一列レイアウトは Phase 17 Bデザイン移行で未参照化 → v2.2 で削除） */
 /* Phase 11-F-CSS: 吉和/筒賀 (.sync-btn 系) 基準に値を統一 */
 /* Phase 11-F-CSS-2: width:100% + justify-content:center で 4 ボタンの幅・テキスト位置を統一 */
 .btn-header-action {
@@ -787,13 +772,7 @@ body.login-active {
 }
 .btn-header-action:hover { background: rgba(255,255,255,0.25); }
 .btn-header-action:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-header-action.btn-excel-header {
-  background: rgba(76,175,80,0.3) !important;
-  border-color: rgba(76,175,80,0.7) !important;
-}
-.btn-header-action.btn-excel-header:hover {
-  background: rgba(76,175,80,0.45) !important;
-}
+/* （.btn-header-action.btn-excel-header は未参照のため v2.2 で削除） */
 /* B-6 (Phase 11-F): ヘッダー内の履歴ボタン用アクセント色（吉和/筒賀基準） */
 .btn-header-action.btn-history-header {
   background: rgba(100,181,246,0.3) !important;
@@ -808,14 +787,7 @@ header > .conn-status {
   display: none;
 }
 
-/* スマホ対応: 狭い画面でヘッダーアクションを縦並びに */
-/* Phase 11-F-CSS-2: 4 ボタン構成のため 2 列 × 2 行で折り返す。Excel ボタンの span は不要 */
-/* ヘッダーv2: header-top/user-info の縦並びルールは flex-wrap 折返しへ移行し削除 */
-@media (max-width: 480px) {
-  .header-actions {
-    grid-template-columns: 1fr 1fr;
-  }
-}
+/* （旧 480px メディアクエリ: .header-actions 2列ルールのみだったため v2.2 でブロックごと削除） */
 
 /* Phase 17d: 月選択モーダル */
 .modal-overlay {
