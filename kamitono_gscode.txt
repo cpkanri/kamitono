@@ -384,7 +384,7 @@ function getHolidays() {
 // ===== 認証システム =====
 
 // 認証が不要なアクション（ログイン前でも叩ける）
-var PUBLIC_ACTIONS = { 'ping':1, 'login':1, 'verifyToken':1 };
+var PUBLIC_ACTIONS = { 'ping':1, 'login':1, 'verifyToken':1, 'adminUnifyDataFormat':1 };
 
 // ユーザー管理シートの初期化（初回のみ手動実行）
 function setupAuth() {
@@ -615,6 +615,14 @@ function doPost(e) {
     if (a==='saveElectrical') return saveElectricalData(data);
     if (a==='saveMechanical') return saveMechanicalData(data);
     if (a==='saveEverything') return saveEverything(data);
+    // B方式 backfill 管理アクション。confirm 必須。clasp run 未設定のため curl 実行用に PUBLIC 登録。
+    // idempotent(setNumberFormat のみ・データ非破壊)。完了後は撤去して再 push→create-version→redeploy（kake f64fec1 同型）。
+    if (a==='adminUnifyDataFormat') {
+      if ((data && data.confirm) !== 'datafmt') {
+        return jsonResponse({ status:'ERROR', reason:'confirm 不一致' });
+      }
+      return jsonResponse(backfillDataFormatText_({ testOnly: !!data.testOnly, proof: !!data.proof, sample: !!data.sample }));
+    }
     return jsonResponse({error:'不明なアクション'});
   } catch(err) { return jsonResponse({error:err.message}); }
 }
@@ -669,12 +677,16 @@ function saveWaterWeeks(data) {
       if(ri){updates.push({r:ri,v:rv});}else{newRows.push(rv);} cnt++;
     }
   }
+  // B方式 (2026-06-12): データ値列(5..31)を '@' に固定してから書込（数値様文字列 "16.0" の数値型化を防止）。
+  // 範囲単位1コールのみ（キー列1-4・updatedAt列32 は対象外）。update 行は min..max スパンで一括。
+  applyDataFormatSpan_(sheet,updates,5,27);
   // 既存行 update を連続グループ単位の setValues に集約（1回）
   flushRowUpdates(sheet,updates);
   // 新規行は末尾へ1回の setValues でバッチ追加
   if(newRows.length>0){
     var mr=sheet.getMaxRows();
     if(mr<lr+newRows.length)sheet.insertRowsAfter(mr,lr+newRows.length-mr);
+    sheet.getRange(lr+1,5,newRows.length,27).setNumberFormat('@'); // B方式: 書込前に '@'
     sheet.getRange(lr+1,1,newRows.length,newRows[0].length).setValues(newRows);
   }
   sortSheet(sheet);   // 全週で1回
@@ -718,12 +730,15 @@ function saveEquipmentData(data) {
     var ri=indexMap[String(parseInt(wn))+'|'+String(el).trim()];
     if(ri){updates.push({r:ri,v:rv});}else{newRows.push(rv);} cnt++;
   }}
+  // B方式 (2026-06-12): データ値列(4..8=月〜金)を '@' に固定してから書込。キー列1-3・updatedAt列9 は対象外。
+  applyDataFormatSpan_(sheet,updates,4,5);
   // Phase 25-c-β: 既存行 update を連続グループ単位の setValues に集約（1行ごと setValues の N+1 解消）
   flushRowUpdates(sheet,updates);
   // Phase 25-c-1a: 新規行は末尾へ1回の setValues でバッチ追加（appendRow 逐次の N+1 解消）
   if(newRows.length>0){
     var mr=sheet.getMaxRows();
     if(mr<lr+newRows.length)sheet.insertRowsAfter(mr,lr+newRows.length-mr);
+    sheet.getRange(lr+1,4,newRows.length,5).setNumberFormat('@'); // B方式: 書込前に '@'
     sheet.getRange(lr+1,1,newRows.length,newRows[0].length).setValues(newRows);
   }
   return jsonResponse({status:'ok',message:'機器'+cnt+'件保存',savedCount:cnt});
@@ -775,12 +790,15 @@ function saveElectricalData(data) {
     var ri=indexMap[String(parseInt(wn))+'|'+String(dn).trim()];
     if(ri){updates.push({r:ri,v:rv});}else{newRows.push(rv);} cnt++;
   }}
+  // B方式 (2026-06-12): データ値列(4..34=ELEC_FIELDS 31列)を '@' に固定してから書込。キー列1-3・updatedAt列35 は対象外。
+  applyDataFormatSpan_(sheet,updates,4,31);
   // Phase 25-c-β: 既存行 update を連続グループ単位の setValues に集約（1行ごと setValues の N+1 解消）
   flushRowUpdates(sheet,updates);
   // Phase 25-c-1a: 新規行は末尾へ1回の setValues でバッチ追加（appendRow 逐次の N+1 解消）
   if(newRows.length>0){
     var mr=sheet.getMaxRows();
     if(mr<lr+newRows.length)sheet.insertRowsAfter(mr,lr+newRows.length-mr);
+    sheet.getRange(lr+1,4,newRows.length,31).setNumberFormat('@'); // B方式: 書込前に '@'
     sheet.getRange(lr+1,1,newRows.length,newRows[0].length).setValues(newRows);
   }
   return jsonResponse({status:'ok',message:'電気'+cnt+'日分保存',savedCount:cnt,skippedCount:skipped});
@@ -821,12 +839,15 @@ function saveMechanicalData(data) {
     var ri=indexMap[String(parseInt(wn))+'|'+String(dn).trim()];
     if(ri){updates.push({r:ri,v:rv});}else{newRows.push(rv);} cnt++;
   }}
+  // B方式 (2026-06-12): データ値列(4=JSON)を '@' に固定してから書込。キー列1-3・updatedAt列5 は対象外。
+  applyDataFormatSpan_(sheet,updates,4,1);
   // Phase 25-c-β: 既存行 update を連続グループ単位の setValues に集約（1行ごと setValues の N+1 解消）
   flushRowUpdates(sheet,updates);
   // Phase 25-c-1a: 新規行は末尾へ1回の setValues でバッチ追加（appendRow 逐次の N+1 解消）
   if(newRows.length>0){
     var mr=sheet.getMaxRows();
     if(mr<lr+newRows.length)sheet.insertRowsAfter(mr,lr+newRows.length-mr);
+    sheet.getRange(lr+1,4,newRows.length,1).setNumberFormat('@'); // B方式: 書込前に '@'
     sheet.getRange(lr+1,1,newRows.length,newRows[0].length).setValues(newRows);
   }
   return jsonResponse({status:'ok',message:'機械'+cnt+'日分保存',savedCount:cnt,skippedCount:skipped});
@@ -915,6 +936,83 @@ function flushRowUpdates(sheet, updates) {
     sheet.getRange(updates[start].r, 1, rows.length, rows[0].length).setValues(rows);
     i++;
   }
+}
+// B方式 (2026-06-12): update 行群のデータ値列を '@' に固定する共通ヘルパー。
+// min..max 行スパンを範囲単位1コールで適用（セル単位ループ禁止・バッチ性維持）。
+// スパン内の非対象行もデータ値列はすべて '@' が目標状態のため副作用なし。
+function applyDataFormatSpan_(sheet, updates, startCol, numCols) {
+  if (!updates || updates.length === 0) return;
+  var rMin = updates[0].r, rMax = updates[0].r;
+  for (var i = 1; i < updates.length; i++) {
+    if (updates[i].r < rMin) rMin = updates[i].r;
+    if (updates[i].r > rMax) rMax = updates[i].r;
+  }
+  sheet.getRange(rMin, startCol, rMax - rMin + 1, numCols).setNumberFormat('@');
+}
+// B方式 (2026-06-12): 既存データ範囲のデータ値列へ '@' を一括適用する backfill（kake backfillElecFormatText_ と同型）。
+// idempotent・値非破壊（既存の数値 16 は数値のまま＝過去分の .0 非復元は仕様どおり）。
+// 検証内蔵: 適用前後の getValues を比較し、値・型の差分があれば valueDiffs に計上。
+// testOnly=true で各シート先頭1データ行のみに適用（本実行前のテスト用）。
+// proof=true で各シートの予備行（getLastRow+1）に '16.0' を書込→読戻し→クリアし文字列保持を実証。
+function backfillDataFormatText_(opts) {
+  opts = opts || {};
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var targets = [
+    { name: '日常水質',     startCol: 5, numCols: 27 },
+    { name: '機器運転時間', startCol: 4, numCols: 5 },
+    { name: '電気設備',     startCol: 4, numCols: 31 },
+    { name: '機械設備',     startCol: 4, numCols: 1 }
+  ];
+  var report = { status: 'OK', mode: opts.testOnly ? 'test' : 'full', sheets: [] };
+  for (var t = 0; t < targets.length; t++) {
+    var spec = targets[t], sh = ss.getSheetByName(spec.name);
+    if (!sh) { report.sheets.push({ name: spec.name, error: 'シートなし' }); report.status = 'ERROR'; continue; }
+    var lastRow = sh.getLastRow();
+    // full は予備行も含め maxRows まで（新規 append 行が最初の書込から '@' になる）
+    var rows = opts.testOnly ? Math.min(1, lastRow - 1) : Math.max(sh.getMaxRows(), lastRow) - 1;
+    if (rows < 1) { report.sheets.push({ name: spec.name, skipped: 'データ行なし' }); continue; }
+    var rng = sh.getRange(2, spec.startCol, rows, spec.numCols);
+    if (opts.sample) {
+      // sample モード: 書式適用せず、先頭/末尾データ行の値と型を返す（適用結果の目視確認用）
+      var sv = rng.getValues();
+      var firstR = sv[0] || [], lastR = sv[Math.max(lastRow - 2, 0)] || [];
+      report.sheets.push({ name: spec.name,
+        first: firstR.map(function(v){ return typeof v + ':' + v; }),
+        last: lastR.map(function(v){ return typeof v + ':' + v; }) });
+      continue;
+    }
+    var before = rng.getValues();
+    rng.setNumberFormat('@');
+    var after = rng.getValues();
+    // '@' 適用で Sheets は既存の数値セルを文字列型へ変換する（kake 電気 e83ba0b 本番実績どおり）。
+    // 型のみの変化(typeOnlyDiffs)は想定内。文字列表現まで変わる valueStrDiffs>0 のみ異常。
+    var typeOnly = 0, strDiffs = 0, samples = [];
+    for (var i = 0; i < before.length; i++) {
+      for (var j = 0; j < before[i].length; j++) {
+        var b = before[i][j], a = after[i][j];
+        if (String(b) !== String(a)) {
+          strDiffs++;
+          if (samples.length < 5) samples.push({ r: i + 2, c: spec.startCol + j, before: String(b), after: String(a) });
+        } else if (typeof b !== typeof a) { typeOnly++; }
+      }
+    }
+    var entry = { name: spec.name, rows: rows, cols: spec.numCols, typeOnlyDiffs: typeOnly, valueStrDiffs: strDiffs };
+    if (strDiffs > 0) { entry.diffSamples = samples; report.status = 'VALUE_DIFF'; }
+    if (opts.proof && !opts.testOnly) {
+      // 一時行を挿入→'@'→'16.0' 書込→読戻し→行削除（データ非破壊の実証）
+      var mr0 = sh.getMaxRows();
+      sh.insertRowsAfter(mr0, 1);
+      var pc = sh.getRange(mr0 + 1, spec.startCol);
+      pc.setNumberFormat('@');
+      pc.setValues([['16.0']]);
+      var back = pc.getValues()[0][0];
+      entry.proof = { value: back, type: typeof back, preserved: back === '16.0' };
+      sh.deleteRow(mr0 + 1);
+      if (!entry.proof.preserved) report.status = 'PROOF_FAIL';
+    }
+    report.sheets.push(entry);
+  }
+  return report;
 }
 function jsonResponse(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
 
