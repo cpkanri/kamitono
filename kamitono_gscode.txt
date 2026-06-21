@@ -624,6 +624,7 @@ function doPost(e) {
     if (a==='saveElectrical') return saveElectricalData(data);
     if (a==='saveMechanical') return saveMechanicalData(data);
     if (a==='saveEverything') return saveEverything(data);
+    if (a==='clearDay') return clearDay(data);
     return jsonResponse({error:'不明なアクション'});
   } catch(err) { return jsonResponse({error:err.message}); }
 }
@@ -863,6 +864,68 @@ function saveEverything(data) {
   if(data.electrical){var r=saveElectricalData({month:month,electrical:data.electrical});results.push(JSON.parse(r.getContent()).message);}
   if(data.mechanical){var r=saveMechanicalData({month:month,mechanical:data.mechanical});results.push(JSON.parse(r.getContent()).message);}
   return jsonResponse({status:'ok',message:results.join('、')});
+}
+
+// ===== サーバークリア: 指定(tab,月,週,曜日)の記録を空に（行は残す・未点検へ戻す）=====
+// 全保存ハンドラが空の日を null-skip するため、明示クリア専用の経路を分ける。
+function clearDay(data) {
+  var month = normalizeMonth(data.month);
+  var week  = parseInt(data.week, 10);
+  var dayKey = data.day;   // 'mon'..'fri'
+  var tab    = data.tab;   // 'water'|'equipment'|'electrical'|'mechanical'
+  if (!data.month || !week || !dayKey || !tab) return jsonResponse({error:'パラメータ不足'});
+  var dn = DAY_NAMES[dayKey];
+  if (!dn) return jsonResponse({error:'曜日不正:'+dayKey});
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var now = new Date(), monthStr = String(month);
+
+  // 機器運転時間: 機器=行 / 曜日=列(月4..金8) / updatedAt=9。当週の全機器行で該当曜日列を空に。
+  if (tab === 'equipment') {
+    var esheet = ss.getSheetByName('機器運転時間');
+    if (!esheet) return jsonResponse({error:'シートなし'});
+    var EQ_DAY_COL = { mon:4, tue:5, wed:6, thu:7, fri:8 };
+    var col = EQ_DAY_COL[dayKey];
+    var elr = esheet.getLastRow(), cleared = 0;
+    if (elr >= 2) {
+      var evals = esheet.getRange(2,1,elr-1,3).getValues();
+      for (var i=0;i<evals.length;i++){
+        if (!matchMonth(evals[i][0], monthStr)) continue;
+        if (String(evals[i][1]) !== String(week)) continue;
+        var er = i+2;
+        esheet.getRange(er, col).setNumberFormat('@');
+        esheet.getRange(er, col).setValue('');
+        esheet.getRange(er, 9).setValue(now);
+        cleared++;
+      }
+    }
+    return jsonResponse({status:'ok', message:'機器 '+dn+'曜 クリア '+cleared+'行', cleared:cleared});
+  }
+
+  // 水質/電気/機械: (週|曜日)=1行。データ列を空に・updatedAt=now。
+  var CFG = {
+    water:      { name:'日常水質', dataStart:5, dataLen:27, updatedAtCol:32 }, // 1月2週3曜4日付 5..31data 32updated
+    electrical: { name:'電気設備', dataStart:4, dataLen:31, updatedAtCol:35 }, // 1月2週3曜 4..34data 35updated
+    mechanical: { name:'機械設備', dataStart:4, dataLen:1,  updatedAtCol:5  }  // 1月2週3曜 4JSON 5updated
+  };
+  var cfg = CFG[tab];
+  if (!cfg) return jsonResponse({error:'不明なtab:'+tab});
+  var sheet = ss.getSheetByName(cfg.name);
+  if (!sheet) return jsonResponse({error:'シートなし'});
+  var lr = sheet.getLastRow(), ri = -1;
+  if (lr >= 2) {
+    var idx = sheet.getRange(2,1,lr-1,3).getValues();
+    for (var ii=0; ii<idx.length; ii++){
+      if (!matchMonth(idx[ii][0], monthStr)) continue;
+      if (String(idx[ii][1]) === String(week) && String(idx[ii][2]).trim() === dn) { ri = ii+2; break; }
+    }
+  }
+  if (ri < 0) return jsonResponse({status:'ok', message:cfg.name+' 対象行なし（既に未点検）', cleared:0});
+  var blanks = [];
+  for (var k=0;k<cfg.dataLen;k++) blanks.push('');
+  sheet.getRange(ri, cfg.dataStart, 1, cfg.dataLen).setNumberFormat('@');
+  sheet.getRange(ri, cfg.dataStart, 1, cfg.dataLen).setValues([blanks]);
+  sheet.getRange(ri, cfg.updatedAtCol).setValue(now);
+  return jsonResponse({status:'ok', message:cfg.name+' '+dn+'曜 クリア', cleared:1});
 }
 
 // ===== 全データ取得 =====
