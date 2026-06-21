@@ -106,9 +106,21 @@ header h1 {
   margin-bottom: 2px;
 }
 
-/* 暦統一: 祝日/年末年始/盆 のグレーアウト（見た目のみ・非権威・入力はブロックしない） */
-.equip-table thead th.grayout { background: #eef0f2; }
-.day-tabs button.grayout:not(.active) { background: #eef0f2; }
+/* 暦統一 A-2: 祝日/年末年始/盆 を「名前＋赤系」で表示（表示のみ・非権威・入力はブロックしない） */
+.equip-table thead th.grayout { background: #fdecea; }
+.equip-table thead th.grayout .col-date { color: #c0392b; font-weight: 600; }
+.equip-table thead th[data-holiday]::after {
+  content: attr(data-holiday);
+  display: block; font-size: 10px; line-height: 1.1; color: #c0392b;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.day-tabs button.grayout:not(.active) { background: #fdecea; }
+.day-tabs button.grayout:not(.active) .day-date { color: #c0392b; }
+.day-tabs button[data-holiday]::after {
+  content: attr(data-holiday);
+  display: block; font-size: 10px; line-height: 1.2; color: #c0392b; white-space: nowrap;
+}
+.day-tabs button.active[data-holiday]::after { color: #ffd9d4; } /* active(緑)時の可読性 */
 
 /* ===== 日タブ ===== */
 .day-tabs {
@@ -2185,7 +2197,16 @@ function updateColDateHeaders(tableId) {
     span.textContent = d ? (d.getMonth() + 1) + "/" + d.getDate() : "";
     // 暦統一: 祝日/年末年始/盆 を見た目だけグレー（非権威・判定には不使用）
     const th = span.closest("th");
-    if (th) th.classList.toggle("grayout", !!(d && window.Holidays && Holidays.isGrayoutDay(d)));
+    if (th) {
+      const _isHol = !!(d && window.Holidays && Holidays.isGrayoutDay(d));
+      th.classList.toggle("grayout", _isHol);
+      // 暦統一 A-2: 祝日名を表示（非権威・表示のみ）
+      if (_isHol && Holidays.holidayName) {
+        th.setAttribute("data-holiday", Holidays.holidayName(d) || "");
+      } else {
+        th.removeAttribute("data-holiday");
+      }
+    }
   });
 }
 
@@ -2574,9 +2595,15 @@ function updateDayTabs() {
     const dateSpan = btn.querySelector(".day-date");
     if (check) check.textContent = isDayFilled(currentWeek, d) ? "✓" : "";
     if (dateSpan) dateSpan.textContent = computeDate(currentWeek, d) || "";
-    // 暦統一: 祝日/年末年始/盆 を見た目だけグレー（非権威・判定には不使用）
+    // 暦統一 A-2: 祝日/年末年始/盆 を名前付きで表示（非権威・判定には不使用）
     const _gd = getActualDate(currentWeek, d);
-    btn.classList.toggle("grayout", !!(_gd && window.Holidays && Holidays.isGrayoutDay(_gd)));
+    const _isHol = !!(_gd && window.Holidays && Holidays.isGrayoutDay(_gd));
+    btn.classList.toggle("grayout", _isHol);
+    if (_isHol && Holidays.holidayName) {
+      btn.setAttribute("data-holiday", Holidays.holidayName(_gd) || "");
+    } else {
+      btn.removeAttribute("data-holiday");
+    }
     let pct = btn.querySelector(".pct");
     if (!pct) { pct = document.createElement("span"); pct.className = "pct"; btn.appendChild(pct); }
     const p = getWaterDayPercent(currentWeek, d);
