@@ -106,6 +106,10 @@ header h1 {
   margin-bottom: 2px;
 }
 
+/* 暦統一: 祝日/年末年始/盆 のグレーアウト（見た目のみ・非権威・入力はブロックしない） */
+.equip-table thead th.grayout { background: #eef0f2; }
+.day-tabs button.grayout:not(.active) { background: #eef0f2; }
+
 /* ===== 日タブ ===== */
 .day-tabs {
   display: flex;
@@ -2179,6 +2183,9 @@ function updateColDateHeaders(tableId) {
     const dk = span.dataset.hday;
     const d = getActualDate(currentWeek, dk);
     span.textContent = d ? (d.getMonth() + 1) + "/" + d.getDate() : "";
+    // 暦統一: 祝日/年末年始/盆 を見た目だけグレー（非権威・判定には不使用）
+    const th = span.closest("th");
+    if (th) th.classList.toggle("grayout", !!(d && window.Holidays && Holidays.isGrayoutDay(d)));
   });
 }
 
@@ -2567,6 +2574,9 @@ function updateDayTabs() {
     const dateSpan = btn.querySelector(".day-date");
     if (check) check.textContent = isDayFilled(currentWeek, d) ? "✓" : "";
     if (dateSpan) dateSpan.textContent = computeDate(currentWeek, d) || "";
+    // 暦統一: 祝日/年末年始/盆 を見た目だけグレー（非権威・判定には不使用）
+    const _gd = getActualDate(currentWeek, d);
+    btn.classList.toggle("grayout", !!(_gd && window.Holidays && Holidays.isGrayoutDay(_gd)));
     let pct = btn.querySelector(".pct");
     if (!pct) { pct = document.createElement("span"); pct.className = "pct"; btn.appendChild(pct); }
     const p = getWaterDayPercent(currentWeek, d);
@@ -3070,8 +3080,7 @@ function buildWaterDaysPayload(weekData) {
   const days = {};
   if (!weekData) return days;
   // 横展開② B2: 祝日の discharge のみ保存ペイロードから除外（B1 出力空欄と対称）。
-  // キャッシュ空/失効時 (holSet 空・day.date 無) は従来挙動フォールバックで悪化させない。
-  const holSet = (typeof getHolidaySetFromCache === 'function') ? getHolidaySetFromCache() : null;
+  // 暦統一 Part B: 非稼働日判定は holidays.js 計算（国民＋年末年始＋盆）。GAS取得非依存。
   Object.keys(weekData).forEach(function(appKey) {
     const src = weekData[appKey];
     if (!src) return;
@@ -3083,7 +3092,7 @@ function buildWaterDaysPayload(weekData) {
     } else {
       out = src;
     }
-    if (holSet && src && src.date && holSet.has(src.date)) {
+    if (src && src.date && window.Holidays && Holidays.isGrayoutDay(src.date)) {
       out = Object.assign({}, out); // src(=live weeklyData) を破壊しないよう複製してから除外
       KAMITONO_HOLIDAY_BLANK_KEYS.forEach(function(k){ delete out[k]; });
     }
@@ -4341,15 +4350,8 @@ function getMechEmptyValue(fieldKey, value) {
 // Phase 22 補追 2: 出力文字を U+002D "-" に変更
 // Phase 22 補追 3: date 引数受取り、祝日セルは null（空欄）維持で「-」を出力しない
 function writeMechEmptyCell(ws, row, col, fieldKey, val, date) {
-  if (date) {
-    try {
-      var hs = getHolidaySetFromCache();
-      if (hs && hs.has(dateToStr(date))) {
-        ws.getCell(row, col).value = null;
-        return;
-      }
-    } catch (e) { /* キャッシュ取得失敗時は既存挙動（"-"出力）にフォールバック */ }
-  }
+  // 暦統一 B-2: 祝日特別扱いは撤去。実測ゲートは呼び出し側(_mechHasData)で実施。
+  // 本関数は「実測のある日の空セル」に対してのみ呼ばれ、必ず「-」を書く。
   var emptyVal = getMechEmptyValue(fieldKey, val);
   var cell = ws.getCell(row, col);
   cell.value = emptyVal;
@@ -4432,6 +4434,21 @@ function dateToStr(d) {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return y + '-' + m + '-' + day;
+}
+
+// ===== 暦統一 Part B: 非稼働日(国民の祝日＋年末年始＋盆)を holidays.js で計算 =====
+// 出力ブランク・次週最初の平日・前月末日参照・機械「-」抑止・保存ペイロード除外の
+// 唯一のソース。GAS取得(kamitono_holidays)/テンプレ「祝日リスト」シートには依存しない。
+// 範囲は前月1日〜翌月末日（次週最初の平日が翌月へ、前月末日参照が前月へ及ぶため余裕を持たせる）。
+function getNonWorkdaySetComputed(yyyy, mm) {
+  const set = new Set();
+  if (!window.Holidays) return set; // フォールバック: 空＝従来の「祝日なし」相当（悪化させない）
+  const start = new Date(yyyy, mm - 2, 1);  // 前月1日
+  const end   = new Date(yyyy, mm + 1, 0);  // 翌月末日
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    if (Holidays.isGrayoutDay(d)) set.add(dateToStr(d)); // 国民＋年末年始＋盆（既定）
+  }
+  return set;
 }
 
 // 次週の最初の平日（祝日・土日を除く）を返す
@@ -4580,15 +4597,9 @@ async function exportExcel() {
     }
   } catch (e) { console.error("テンプレ日付式クリア:", e); }
 
-  // 祝日リストを取得（日常水質N列の次週最初の平日計算用）
-  // まず localStorage キャッシュから取得、なければテンプレから読み取り
-  let holidaySet = getHolidaySetFromCache();
-  if (holidaySet.size === 0) {
-    // キャッシュなし → GAS に非同期でリクエスト（結果は次回以降使う）
-    fetchHolidaysFromServer();
-    // 今回のExcel出力は、テンプレに祝日リストシートがあればそこから読む（フォールバック）
-    holidaySet = getHolidaySet(wb);
-  }
+  // 暦統一 Part B: 非稼働日は holidays.js 計算（国民＋年末年始＋盆）。
+  // GAS取得(kamitono_holidays)・テンプレ「祝日リスト」シートには依存しない。
+  const holidaySet = getNonWorkdaySetComputed(yyyy, mm);
 
   // 日常水質シート: P1 に対象月の1日を固定値として書き込む
   // テンプレの P1 は I3 参照式なので、これを値で上書きして月報シート連動を安定化
@@ -5240,12 +5251,12 @@ function fillElecSheet(ws, yyyy, mm, holidaySet) {
       if (actual.getFullYear() !== yyyy || (actual.getMonth() + 1) !== mm) continue;
       const col = DAY_COL[dk];
       const day = wData ? wData[dk] : null;
-      const isHol = holidaySet.has(dateToStr(actual));
+      // 暦統一 B-2 (rule 1/6): 祝日特別扱いを撤去。実測の有無のみで判定（祝日でも実測があれば出力）。
       const hasRealData = !!day && Object.keys(OFFSETS).some(function (key) {
         const v = day[key];
         return v !== null && v !== undefined && v !== "" && v !== "-" && v !== "ー";
       });
-      if (isHol || !hasRealData) {
+      if (!hasRealData) {
         for (let r = base + 0; r <= base + 31; r++) ws.getCell(r, col).value = null;
         continue;
       }
@@ -5355,15 +5366,18 @@ function fillMechSheet(ws, yyyy, mm) {
       const col = DAY_COL[dk];
       const day = wData[dk];
       if (!day) continue;
+      // 暦統一 B-2 (rule 6): その日に機械の実測があるか（MAP1/MAP2 に実値が1つでも）。
+      // 実測のある日のみ空セルへ「-」、実測なし日は丸ごと空白（クリア済みnullのまま）。
+      const _mechHasData = Object.keys(MAP1).concat(Object.keys(MAP2)).some(function (k) {
+        const v = day[k];
+        return v !== null && v !== undefined && v !== "" && v !== "-" && v !== "ー";
+      });
       // 1/2
-      // Phase 22: 数値型フィールドの未入力セルは「ー」を出力（トグル系は従来どおり空）
-      // Phase 22 補追: 「ー」書込時は numFmt="@" を付与（テキスト書式に統一、表示崩れ防止）
-      // Phase 22 補追 3: writeMechEmptyCell に actual (Date) を渡し、祝日セルは空欄維持
       for (const key in MAP1) {
         const row1 = MAP1[key] + wk.p1;
         const val1 = day[key];
         if (val1 === null || val1 === undefined || val1 === "") {
-          writeMechEmptyCell(ws, row1, col, key, val1, actual);
+          if (_mechHasData) writeMechEmptyCell(ws, row1, col, key, val1, actual);
         } else {
           setCell(ws, row1, col, val1);
         }
@@ -5373,7 +5387,7 @@ function fillMechSheet(ws, yyyy, mm) {
         const row2 = MAP2[key] + wk.p2 - 63;
         const val2 = day[key];
         if (val2 === null || val2 === undefined || val2 === "") {
-          writeMechEmptyCell(ws, row2, col, key, val2, actual);
+          if (_mechHasData) writeMechEmptyCell(ws, row2, col, key, val2, actual);
         } else {
           setCell(ws, row2, col, val2);
         }
@@ -5381,28 +5395,73 @@ function fillMechSheet(ws, yyyy, mm) {
     }
   }
 
-  // ===== W1 点検者数式の補完（テンプレ Row2/65 に数式が存在しないため出力時に生成）=====
-  // 点検者名はハードコードせず W2(1/2) E127 のテンプレ数式 ,"","<名前>") から抽出。抽出失敗時はスキップ。
+  // ===== 暦統一 B-2b: 機械設備 点検者を「実測ゲートの値書込」へ統一（祝日リスト数式を撤去）=====
+  // ・W2〜W5: テンプレ焼込みの 祝日リスト参照 COUNTIF 数式を、同じセルで「実測のある日のみ名前／他は空」の値へ置換（位置不変）。
+  // ・W1(行2/65): テンプレに数式が無いため、日付列(E/G/I/K/M)へ同基準で値を書込（従来スキップされ空欄だったものを是正）。
+  // ・実測 = その(週,曜日)の機械データ(MAP1/MAP2)に実値が1つでもある（rule 1/6）。
   try {
-    var refV = ws.getCell(127, 5).value; // W2(1/2) E127 のテンプレ数式
-    var refF = refV && typeof refV === "object" ? refV.formula : null;
-    var nameM = refF ? refF.match(/,\s*""\s*,\s*"([^"]+)"\s*\)\s*$/) : null;
-    if (nameM) {
-      var inspName = nameM[1];
-      var COLS_L = { 5: "E", 7: "G", 9: "I", 11: "K", 13: "M" };
-      [[2, 3], [65, 66]].forEach(function (pair) { // [点検者行, 日付ヘッダ行] = W1 の 1/2・2/2
-        var inspRow = pair[0], dateRow = pair[1];
-        [5, 7, 9, 11, 13].forEach(function (c) {
-          var L = COLS_L[c];
-          ws.getCell(inspRow, c).value = {
-            formula: 'IF(OR(' + L + dateRow + '="",COUNTIF(祝日リスト!$A:$A,' + L + dateRow + ')>0),"","' + inspName + '")'
-          };
+    // (1) 機械の実測有無を (週,曜日) で構築
+    var mechMeasured = {};
+    for (var _w = 1; _w <= 5; _w++) {
+      mechMeasured[_w] = {};
+      var _wd = weeklyData.mechanical[_w];
+      for (var _dk in DAY_COL) {
+        var _act = getActualDate(_w, _dk);
+        var _inM = _act && _act.getFullYear() === yyyy && (_act.getMonth() + 1) === mm;
+        var _day = (_wd && _inM) ? _wd[_dk] : null;
+        mechMeasured[_w][_dk] = !!_day && Object.keys(MAP1).concat(Object.keys(MAP2)).some(function (k) {
+          var v = _day[k];
+          return v !== null && v !== undefined && v !== "" && v !== "-" && v !== "ー";
+        });
+      }
+    }
+    var INSP_ROW_TO_WEEK = { 2: 1, 65: 1, 127: 2, 190: 2, 252: 3, 315: 3, 377: 4, 440: 4, 502: 5, 565: 5 };
+    var DATECOL_TO_DAY = { 5: "mon", 7: "tue", 9: "wed", 11: "thu", 13: "fri" };
+    var INSP_ROWS = [2, 65, 127, 190, 252, 315, 377, 440, 502, 565];
+    // (2) 点検者名をテンプレ数式から抽出（祝日リスト参照 COUNTIF を含む数式の末尾 ,"<名前>") ）
+    var inspName = "";
+    for (var _ri = 0; _ri < INSP_ROWS.length && !inspName; _ri++) {
+      for (var _c = 3; _c <= 14; _c++) {
+        var _cv = ws.getCell(INSP_ROWS[_ri], _c).value;
+        var _f = (_cv && typeof _cv === "object") ? _cv.formula : null;
+        if (_f && _f.indexOf("祝日リスト") >= 0) {
+          var _nm = _f.match(/,\s*"([^"]+)"\s*\)\s*$/);
+          if (_nm) { inspName = _nm[1]; break; }
+        }
+      }
+    }
+    if (!inspName) {
+      console.warn("機械設備点検者: テンプレ数式から名前を抽出できず、数式を温存（B-2b スキップ）");
+    } else {
+      // (3) W2〜W5: 既存 祝日リスト参照 COUNTIF 数式セルを、同位置で実測ゲートの値へ置換
+      for (var _r2 = 0; _r2 < INSP_ROWS.length; _r2++) {
+        var _row = INSP_ROWS[_r2];
+        if (_row === 2 || _row === 65) continue; // W1 は (4) で処理
+        var _wk = INSP_ROW_TO_WEEK[_row];
+        for (var _cc = 3; _cc <= 14; _cc++) {
+          var _cell = ws.getCell(_row, _cc);
+          var _fv = (_cell.value && typeof _cell.value === "object") ? _cell.value.formula : null;
+          if (!_fv || _fv.indexOf("祝日リスト") < 0) continue;
+          var _dm = _fv.match(/OR\(\s*([A-Z]+)\d+\s*=/); // 参照日セルの列（例: E128 → E）
+          var _dayKey = null;
+          if (_dm) {
+            var _colNum = 0, _s = _dm[1];
+            for (var _i = 0; _i < _s.length; _i++) _colNum = _colNum * 26 + (_s.charCodeAt(_i) - 64);
+            _dayKey = DATECOL_TO_DAY[_colNum];
+          }
+          var _meas = _dayKey ? mechMeasured[_wk][_dayKey] : false;
+          _cell.value = _meas ? inspName : null;
+        }
+      }
+      // (4) W1(行2/65): 日付列 E/G/I/K/M へ実測ゲートで値書込
+      [2, 65].forEach(function (_ir) {
+        [5, 7, 9, 11, 13].forEach(function (_c4) {
+          var _dk4 = DATECOL_TO_DAY[_c4];
+          ws.getCell(_ir, _c4).value = mechMeasured[1][_dk4] ? inspName : null;
         });
       });
-    } else {
-      console.warn("機械設備W1点検者: テンプレW2数式から名前を抽出できず、補完をスキップ");
     }
-  } catch (e) { console.warn("機械設備W1点検者補完エラー:", e); }
+  } catch (e) { console.warn("機械設備点検者 B-2b エラー:", e); }
 }
 
 
@@ -5998,6 +6057,8 @@ attachUndoToTableInputs();
   </div>
 </div>
 
+<script src="./wareki.js?v=20260621-1"></script>
+<script src="./holidays.js?v=20260621-1"></script>
 <script src="./template.js"></script>
 <script src="./excel-write-map.js"></script>
 
