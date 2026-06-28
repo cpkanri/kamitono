@@ -1,5 +1,5 @@
 // 上殿浄化センター 週報 Service Worker
-const CACHE_NAME = 'kamitono-v104';
+const CACHE_NAME = 'kamitono-v105';
 const ASSETS = [
   './',
   './index.html',
