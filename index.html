@@ -213,6 +213,7 @@ header h1 {
   background: #fafbfc;
 }
 .field input[type="text"] { text-align: left; }
+.field input[type="text"][data-dec-auto="1"] { text-align: right; }
 .field input:focus {
   outline: none;
   border-color: #0d4f34;
@@ -1544,6 +1545,8 @@ const ALL_FIELDS = [
 ];
 
 const COPY_FIELDS = [
+  "power200v", "power100v", "water", "diesel",
+  "returnSludge", "excessSludge", "discharge",
   "tempIn", "tempDitch", "tempOut",
   "transIn", "transOut",
   "phIn", "phDitch", "phOut",
